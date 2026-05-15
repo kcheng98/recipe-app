@@ -49,9 +49,9 @@ export default function Sidebar({
         <div className="flex items-center justify-between border-b border-[#e5e5ea] px-5 py-5">
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f]">
-              Our Recipes
+              Homemade
             </h1>
-            <p className="text-sm text-[#86868b]">Kenzi &amp; Husband</p>
+            <p className="text-sm text-[#86868b]">Kenzi &amp; Martin</p>
           </div>
           <button
             type="button"
