@@ -1,0 +1,213 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import ManageFoldersModal from "@/components/ManageFoldersModal";
+import ManageLabelsModal from "@/components/ManageLabelsModal";
+import RecipeCard from "@/components/RecipeCard";
+import SearchBar from "@/components/SearchBar";
+import Sidebar from "@/components/Sidebar";
+import TagFilter from "@/components/TagFilter";
+import { useApp } from "@/context/AppProvider";
+import { ALL_FOLDER_ID } from "@/lib/defaults";
+
+export default function HomePage() {
+  const { ready, recipes, labels, folders } = useApp();
+  const [search, setSearch] = useState("");
+  const [activeFolder, setActiveFolder] = useState(ALL_FOLDER_ID);
+  const [activeLabelId, setActiveLabelId] = useState("all");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [foldersModalOpen, setFoldersModalOpen] = useState(false);
+  const [labelsModalOpen, setLabelsModalOpen] = useState(false);
+
+  const labelFilterOptions = useMemo(
+    () => ["all", ...labels.map((l) => l.id)],
+    [labels],
+  );
+
+  const labelFilterLabels = useMemo(
+    () => ({
+      all: "All labels",
+      ...Object.fromEntries(labels.map((l) => [l.id, l.name])),
+    }),
+    [labels],
+  );
+
+  const filteredRecipes = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return recipes.filter((recipe) => {
+      const matchesFolder =
+        activeFolder === ALL_FOLDER_ID || recipe.folderId === activeFolder;
+
+      const matchesLabel =
+        activeLabelId === "all" || recipe.labelIds.includes(activeLabelId);
+
+      const recipeLabelNames = labels
+        .filter((l) => recipe.labelIds.includes(l.id))
+        .map((l) => l.name);
+
+      const matchesSearch =
+        query === "" ||
+        recipe.title.toLowerCase().includes(query) ||
+        recipe.description.toLowerCase().includes(query) ||
+        recipe.ingredients.toLowerCase().includes(query) ||
+        recipeLabelNames.some((name) => name.toLowerCase().includes(query));
+
+      return matchesFolder && matchesLabel && matchesSearch;
+    });
+  }, [search, activeFolder, activeLabelId, recipes, labels]);
+
+  const activeFolderLabel =
+    activeFolder === ALL_FOLDER_ID
+      ? "All Recipes"
+      : (folders.find((f) => f.id === activeFolder)?.label ?? "Recipes");
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-[#86868b]">
+        Loading your recipes…
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar
+        folders={folders}
+        activeFolder={activeFolder}
+        onFolderSelect={setActiveFolder}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onManageFolders={() => setFoldersModalOpen(true)}
+        onManageLabels={() => setLabelsModalOpen(true)}
+      />
+
+      <ManageFoldersModal
+        open={foldersModalOpen}
+        onClose={() => setFoldersModalOpen(false)}
+      />
+      <ManageLabelsModal
+        open={labelsModalOpen}
+        onClose={() => setLabelsModalOpen(false)}
+      />
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-3 lg:hidden">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                aria-label="Open folders"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1d1d1f] shadow-sm ring-1 ring-[#e5e5ea]"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              </button>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">
+                  Our Recipes
+                </p>
+                <p className="text-sm font-semibold text-[#1d1d1f]">
+                  {activeFolderLabel}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/recipes/new"
+              className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white"
+            >
+              Add
+            </Link>
+          </div>
+
+          <div className="mt-4 max-w-xl lg:mt-0">
+            <SearchBar value={search} onChange={setSearch} />
+          </div>
+
+          {labels.length > 0 && (
+            <div className="mt-4">
+              <TagFilter
+                categories={labelFilterOptions.map(
+                  (id) => labelFilterLabels[id as keyof typeof labelFilterLabels] ?? id,
+                )}
+                activeCategory={
+                  activeLabelId === "all"
+                    ? "All labels"
+                    : (labels.find((l) => l.id === activeLabelId)?.name ?? "")
+                }
+                onSelect={(name) => {
+                  if (name === "All labels") setActiveLabelId("all");
+                  else {
+                    const label = labels.find((l) => l.name === name);
+                    if (label) setActiveLabelId(label.id);
+                  }
+                }}
+              />
+            </div>
+          )}
+        </header>
+
+        <section className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight text-[#1d1d1f]">
+                {activeFolderLabel}
+              </h2>
+              <p className="mt-1 text-sm text-[#86868b]">
+                {filteredRecipes.length}{" "}
+                {filteredRecipes.length === 1 ? "recipe" : "recipes"}
+              </p>
+            </div>
+            <Link
+              href="/recipes/new"
+              className="hidden rounded-xl bg-[#0071e3] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0077ed] lg:inline-flex"
+            >
+              + Add recipe
+            </Link>
+          </div>
+
+          {filteredRecipes.length > 0 ? (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {filteredRecipes.map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  labels={labels}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-2xl bg-white px-6 py-16 text-center ring-1 ring-[#e5e5ea]">
+              <p className="text-lg font-medium text-[#1d1d1f]">
+                No recipes found
+              </p>
+              <p className="mt-2 max-w-sm text-sm text-[#86868b]">
+                Try a different search, folder, or label—or add your first recipe.
+              </p>
+              <Link
+                href="/recipes/new"
+                className="mt-6 rounded-xl bg-[#0071e3] px-6 py-3 text-sm font-semibold text-white"
+              >
+                Add recipe
+              </Link>
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
