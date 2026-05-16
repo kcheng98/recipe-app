@@ -134,7 +134,7 @@ function extractRecipeFromJsonLd(html: string, pageUrl: string): ImportedRecipe 
     try {
       const parsed = JSON.parse(jsonText) as JsonLdRecipe | JsonLdRecipe[] | JsonLdGraph;
 
-      if (!Array.isArray(parsed) && parsed["@graph"]) {
+      if (!Array.isArray(parsed) && "@graph" in parsed && (parsed as JsonLdGraph)["@graph"]) {
         const graph = (parsed as JsonLdGraph)["@graph"] ?? [];
         for (const item of graph) {
           if (isRecipeType(item["@type"])) candidates.push(item);
