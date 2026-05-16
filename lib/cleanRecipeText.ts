@@ -27,7 +27,9 @@ export function cleanImportedRecipe(recipe: ImportedRecipe): ImportedRecipe {
     description: cleanRecipeLine(recipe.description ?? ""),
     ingredients: cleanRecipeBlock(recipe.ingredients ?? ""),
     instructions: cleanRecipeBlock(recipe.instructions ?? ""),
+    prepTime: cleanRecipeLine(recipe.prepTime ?? ""),
     cookTime: cleanRecipeLine(recipe.cookTime ?? ""),
-    servings: cleanRecipeLine(recipe.servings ?? ""),
+    totalTime: cleanRecipeLine(recipe.totalTime ?? ""),
+    yields: cleanRecipeLine(recipe.yields ?? ""),
   };
 }
