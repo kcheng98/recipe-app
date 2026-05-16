@@ -96,10 +96,16 @@ export default function CookModePage() {
           <h2 className="mb-4 text-xl font-semibold">Ingredients</h2>
           <ul className="space-y-3 text-[17px] leading-relaxed">
             {ingredients.map((item) => (
-              <li key={item} className="flex gap-3">
-                <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#0071e3]" />
-                <span>{item}</span>
-              </li>
+              item.endsWith(":") ? (
+                <li key={item} className="pt-2 text-sm font-semibold uppercase tracking-wide text-[#515154]">
+                  {item}
+                </li>
+              ) : (
+                <li key={item} className="flex gap-3">
+                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#0071e3]" />
+                  <span>{item}</span>
+                </li>
+              )
             ))}
           </ul>
         </section>
@@ -107,14 +113,27 @@ export default function CookModePage() {
         <section className="mt-10">
           <h2 className="mb-4 text-xl font-semibold">Instructions</h2>
           <ol className="space-y-5">
-            {steps.map((step, index) => (
-              <li key={`${index}-${step.slice(0, 24)}`} className="flex gap-4">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1d1d1f] text-sm font-semibold text-white">
-                  {index + 1}
-                </span>
-                <p className="pt-0.5 text-[17px] leading-relaxed">{step}</p>
-              </li>
-            ))}
+            {(() => {
+              let stepNumber = 0;
+              return steps.map((step, index) => {
+                if (step.endsWith(":")) {
+                  return (
+                    <li key={`${index}-${step.slice(0, 24)}`} className="pt-2 text-sm font-semibold uppercase tracking-wide text-[#515154]">
+                      {step}
+                    </li>
+                  );
+                }
+                stepNumber++;
+                return (
+                  <li key={`${index}-${step.slice(0, 24)}`} className="flex gap-4">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1d1d1f] text-sm font-semibold text-white">
+                      {stepNumber}
+                    </span>
+                    <p className="pt-0.5 text-[17px] leading-relaxed">{step}</p>
+                  </li>
+                );
+              });
+            })()}
           </ol>
         </section>
       </main>
