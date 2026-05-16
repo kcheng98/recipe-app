@@ -92,25 +92,43 @@ export default function RecipeForm({
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className={labelClass}>Cook time</label>
-              <input
-                className={inputClass}
-                value={draft.cookTime}
-                onChange={(e) => update("cookTime", e.target.value)}
-                placeholder="e.g. 30 min"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Servings</label>
-              <input
-                className={inputClass}
-                value={draft.servings}
-                onChange={(e) => update("servings", e.target.value)}
-                placeholder="e.g. 4"
-              />
-            </div>
+          <div>
+            <label className={labelClass}>Prep time</label>
+            <input
+              className={inputClass}
+              value={draft.prepTime}
+              onChange={(e) => update("prepTime", e.target.value)}
+              placeholder="e.g. 15 min"
+            />
           </div>
+          <div>
+            <label className={labelClass}>Cook time</label>
+            <input
+              className={inputClass}
+              value={draft.cookTime}
+              onChange={(e) => update("cookTime", e.target.value)}
+              placeholder="e.g. 30 min"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Total time</label>
+            <input
+              className={inputClass}
+              value={draft.totalTime}
+              onChange={(e) => update("totalTime", e.target.value)}
+              placeholder="e.g. 45 min"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Yields</label>
+            <input
+              className={inputClass}
+              value={draft.yields}
+              onChange={(e) => update("yields", e.target.value)}
+              placeholder="e.g. 4 servings"
+            />
+          </div>
+        </div>  
           <div>
             <label className={labelClass}>Folder</label>
             <select

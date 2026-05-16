@@ -64,9 +64,19 @@ export default function CookModePage() {
           {recipe.title}
         </h1>
 
-        <div className="mt-3 flex flex-wrap gap-3 text-sm text-[#86868b]">
-          {recipe.cookTime ? <span>⏱ {recipe.cookTime}</span> : null}
-          {recipe.servings ? <span>🍽 Serves {recipe.servings}</span> : null}
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#86868b]">
+          {recipe.prepTime ? (
+            <span><span className="font-medium uppercase tracking-wide text-xs text-[#515154]">Prep Time:</span> {recipe.prepTime}</span>
+          ) : null}
+          {recipe.cookTime ? (
+            <span><span className="font-medium uppercase tracking-wide text-xs text-[#515154]">Cook Time:</span> {recipe.cookTime}</span>
+          ) : null}
+          {recipe.totalTime ? (
+            <span><span className="font-medium uppercase tracking-wide text-xs text-[#515154]">Total Time:</span> {recipe.totalTime}</span>
+          ) : null}
+          {recipe.yields ? (
+            <span><span className="font-medium uppercase tracking-wide text-xs text-[#515154]">Yield:</span> {recipe.yields}</span>
+          ) : null}
         </div>
 
         {recipeLabels.length > 0 ? (

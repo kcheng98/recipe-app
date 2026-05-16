@@ -190,11 +190,10 @@ function parseJsonLd(html: string, pageUrl: string): ImportedRecipe | null {
           title: recipe.name,
           description: recipe.description ?? "",
           imageUrl,
-          cookTime:
-            parseDuration(recipe.totalTime) ||
-            parseDuration(recipe.cookTime) ||
-            parseDuration(recipe.prepTime),
-          servings: String(recipe.recipeYield ?? ""),
+          prepTime: parseDuration(recipe.prepTime),
+          cookTime: parseDuration(recipe.cookTime),
+          totalTime: parseDuration(recipe.totalTime),
+          yields: String(recipe.recipeYield ?? ""),
           ingredients: (recipe.recipeIngredient ?? [])
             .map((line) => cleanRecipeLine(line))
             .filter(Boolean)
@@ -227,18 +226,30 @@ function parseRecipeCard(
   const instructions = instructionList($, card);
   const imageUrl = firstImageInCard($, card, pageUrl);
 
-  const servings = cleanRecipeLine(
+  const yields = cleanRecipeLine(
     card
       .find(".wprm-recipe-servings, [class*='servings'], [itemprop='recipeYield']")
       .first()
       .text() || card.find("[itemprop='recipeYield']").text(),
   );
 
+  const prepTime = cleanRecipeLine(
+    card
+      .find(".wprm-recipe-prep-time-container, .wprm-recipe-prep-time, [itemprop='prepTime']")
+      .first()
+      .text(),
+  );
+
   const cookTime = cleanRecipeLine(
     card
-      .find(
-        ".wprm-recipe-total-time, .wprm-recipe-cook-time, [itemprop='totalTime'], [itemprop='cookTime']",
-      )
+      .find(".wprm-recipe-cook-time-container, .wprm-recipe-cook-time, [itemprop='cookTime']")
+      .first()
+      .text(),
+  );
+
+  const totalTime = cleanRecipeLine(
+    card
+      .find(".wprm-recipe-total-time-container, .wprm-recipe-total-time, [itemprop='totalTime']")
       .first()
       .text(),
   );
@@ -256,8 +267,10 @@ function parseRecipeCard(
     title,
     description,
     imageUrl,
+    prepTime,
     cookTime,
-    servings,
+    totalTime,
+    yields,
     ingredients,
     instructions,
   };
@@ -317,8 +330,10 @@ export function parseRecipeFromHtml(html: string, sourceUrl: string): ImportedRe
     if (fromCard) {
       result = {
         ...fromCard,
+        prepTime: fromCard.prepTime || jsonLd?.prepTime || "",
         cookTime: fromCard.cookTime || jsonLd?.cookTime || "",
-        servings: fromCard.servings || jsonLd?.servings || "",
+        totalTime: fromCard.totalTime || jsonLd?.totalTime || "",
+        yields: fromCard.yields || jsonLd?.yields || "",
         imageUrl: pickImage(
           sourceUrl,
           fromCard.imageUrl ?? "",

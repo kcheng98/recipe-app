@@ -5,8 +5,10 @@ export type Recipe = {
   title: string;
   description: string;
   imageUrl: string;
+  prepTime: string;
   cookTime: string;
-  servings: string;
+  totalTime: string;
+  yields: string;
   ingredients: string;
   instructions: string;
   labelIds: string[];
