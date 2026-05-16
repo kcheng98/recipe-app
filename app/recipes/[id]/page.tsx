@@ -54,8 +54,8 @@ export default function CookModePage() {
       </header>
 
       {recipe.imageUrl ? (
-        <div className="relative aspect-[16/10] w-full bg-[#f5f5f7]">
-          <RecipeImage src={recipe.imageUrl} alt={recipe.title} fill />
+        <div className="relative w-full bg-[#f5f5f7] aspect-[16/10] md:aspect-[32/10]">
+        <RecipeImage src={recipe.imageUrl} alt={recipe.title} fill />
         </div>
       ) : null}
 
