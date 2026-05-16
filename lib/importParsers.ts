@@ -142,7 +142,7 @@ function extractRecipeFromJsonLd(html: string, pageUrl: string): ImportedRecipe 
         return;
       }
 
-      const items = Array.isArray(parsed) ? parsed : [parsed];
+      const items = Array.isArray(parsed) ? parsed : [parsed as JsonLdRecipe];
       for (const item of items) {
         if (isRecipeType(item["@type"])) candidates.push(item);
       }
