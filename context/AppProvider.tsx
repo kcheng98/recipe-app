@@ -55,25 +55,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("local");
   const cloudEnabled = isSupabaseConfigured();
-  const skipNextSave = useRef(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const persist = useCallback((updater: (prev: AppData) => AppData) => {
-    setData(updater);
-  }, []);
+  // Keep a ref to the latest user so persistAndSync can always access it
+  // without needing to be recreated every time user changes.
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
 
+  // ─── Cloud + local save, called directly on every mutation ───────────────
+  // This replaces the old debounced useEffect approach, which was cancelled
+  // whenever the component re-rendered (e.g. on navigation), causing recipes
+  // to never reach Supabase.
+  const persistAndSync = useCallback(
+    (updater: (prev: AppData) => AppData) => {
+      setData((prev) => {
+        const next = updater(prev);
+
+        // 1. Write to localStorage immediately (synchronous, never fails)
+        saveAppData(next);
+
+        // 2. Write to Supabase immediately (fire-and-forget, no timer)
+        const currentUser = userRef.current;
+        if (currentUser && cloudEnabled) {
+          setSyncStatus("syncing");
+          saveCloudData(currentUser.id, next)
+            .then(() => setSyncStatus("synced"))
+            .catch(() => setSyncStatus("offline"));
+        }
+
+        return next;
+      });
+    },
+    [cloudEnabled],
+  );
+
+  // ─── Initial load + realtime subscription ────────────────────────────────
   useEffect(() => {
     const supabase = getSupabase();
-  
+
     if (!supabase) {
       setData(loadAppData());
       setSyncStatus("local");
       setReady(true);
       return;
     }
-  
+
     let unsubscribeRealtime: (() => void) | undefined;
-  
+    let initialLoadDone = false;
+
     async function loadForUser(currentUser: User | null) {
       if (!currentUser) {
         setData(loadAppData());
@@ -81,192 +109,209 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setReady(true);
         return;
       }
-  
+
       setSyncStatus("syncing");
       try {
         const cloud = await fetchCloudData(currentUser.id);
-  
+
         if (cloud) {
-          // Cloud is the source of truth — ALWAYS prefer it
+          // Cloud is always the source of truth — never let localStorage win
           setData(cloud);
           saveAppData(cloud);
         } else {
-          // No cloud row exists yet — push local up once
+          // No cloud row yet — seed it from localStorage once
           const local = loadAppData();
           const seed = local.recipes.length > 0 ? local : defaultAppData;
           setData(seed);
           await saveCloudData(currentUser.id, seed);
         }
-  
+
+        // Subscribe to realtime changes from other devices
         unsubscribeRealtime = subscribeToCloudData(currentUser.id, (fresh) => {
-          skipNextSave.current = true;
           setData(fresh);
           saveAppData(fresh);
         });
-  
+
         setSyncStatus("synced");
       } catch {
-        // Network failed — use localStorage as read-only fallback, never write back
+        // Network error — show local data read-only, never write back to cloud
         setData(loadAppData());
         setSyncStatus("offline");
       } finally {
         setReady(true);
       }
     }
-  
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      userRef.current = currentUser;
+      initialLoadDone = true;
       loadForUser(currentUser);
     });
-  
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        if (!currentUser) {
-          unsubscribeRealtime?.();
-          setSyncStatus("local");
-        } else {
-          // Re-fetch cloud when auth state changes (new tab, sign-in, token refresh)
-          unsubscribeRealtime?.();
-          loadForUser(currentUser);
-        }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Skip the immediate echo that Supabase fires on subscription setup
+      if (!initialLoadDone) return;
+
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      userRef.current = currentUser;
+
+      if (!currentUser) {
+        unsubscribeRealtime?.();
+        setSyncStatus("local");
+      } else {
+        // New tab / token refresh — re-fetch cloud to get latest data
+        unsubscribeRealtime?.();
+        loadForUser(currentUser);
       }
-    );
-  
+    });
+
     return () => {
       subscription.unsubscribe();
       unsubscribeRealtime?.();
     };
   }, []);
 
+  // ─── Keep localStorage in sync with in-memory state (read path only) ─────
+  // This only runs on initial hydration. All write-path saves happen in
+  // persistAndSync above.
   useEffect(() => {
     if (!ready) return;
     saveAppData(data);
+  }, [data, ready]);
 
-    if (!user || !cloudEnabled) return;
+  // ─── Mutations ────────────────────────────────────────────────────────────
 
-    if (skipNextSave.current) {
-      skipNextSave.current = false;
-      return;
-    }
+  const addRecipe = useCallback(
+    (draft: RecipeDraft) => {
+      const recipe = createRecipe(draft);
+      persistAndSync((prev) => ({ ...prev, recipes: [recipe, ...prev.recipes] }));
+      return recipe;
+    },
+    [persistAndSync],
+  );
 
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    setSyncStatus("syncing");
-
-    saveTimer.current = setTimeout(async () => {
-      try {
-        await saveCloudData(user.id, data);
-        setSyncStatus("synced");
-      } catch {
-        setSyncStatus("offline");
-      }
-    }, 800);
-
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [data, ready, user, cloudEnabled]);
-
-  const addRecipe = useCallback((draft: RecipeDraft) => {
-    const recipe = createRecipe(draft);
-    persist((prev) => ({ ...prev, recipes: [recipe, ...prev.recipes] }));
-    return recipe;
-  }, [persist]);
-
-  const updateRecipeById = useCallback((id: string, draft: RecipeDraft) => {
-    persist((prev) => ({
-      ...prev,
-      recipes: prev.recipes.map((r) =>
-        r.id === id ? updateRecipe(r, draft) : r,
-      ),
-    }));
-  }, [persist]);
-
-  const deleteRecipe = useCallback((id: string) => {
-    persist((prev) => ({
-      ...prev,
-      recipes: prev.recipes.filter((r) => r.id !== id),
-    }));
-  }, [persist]);
-
-  const addLabel = useCallback((name: string) => {
-    const label: Label = { id: createId(), name: name.trim() };
-    persist((prev) => ({ ...prev, labels: [...prev.labels, label] }));
-    return label;
-  }, [persist]);
-
-  const updateLabel = useCallback((id: string, name: string) => {
-    persist((prev) => ({
-      ...prev,
-      labels: prev.labels.map((l) =>
-        l.id === id ? { ...l, name: name.trim() } : l,
-      ),
-    }));
-  }, [persist]);
-
-  const deleteLabel = useCallback((id: string) => {
-    persist((prev) => ({
-      ...prev,
-      labels: prev.labels.filter((l) => l.id !== id),
-      recipes: prev.recipes.map((r) => ({
-        ...r,
-        labelIds: r.labelIds.filter((lid) => lid !== id),
-      })),
-    }));
-  }, [persist]);
-
-  const addFolder = useCallback((label: string, icon: string) => {
-    const folder: Folder = {
-      id: createId(),
-      label: label.trim(),
-      icon: icon.trim() || "📁",
-      order: 0,
-    };
-    persist((prev) => ({
-      ...prev,
-      folders: sortFolders([
-        ...prev.folders.map((f) => ({ ...f, order: f.order + 1 })),
-        folder,
-      ]),
-    }));
-    return folder;
-  }, [persist]);
-
-  const reorderFolders = useCallback((orderedIds: string[]) => {
-    persist((prev) => ({
-      ...prev,
-      folders: sortFolders(
-        prev.folders.map((folder) => ({
-          ...folder,
-          order: orderedIds.indexOf(folder.id),
-        })),
-      ),
-    }));
-  }, [persist]);
-
-  const updateFolder = useCallback((id: string, label: string, icon: string) => {
-    persist((prev) => ({
-      ...prev,
-      folders: prev.folders.map((f) =>
-        f.id === id ? { ...f, label: label.trim(), icon: icon.trim() || "📁" } : f,
-      ),
-    }));
-  }, [persist]);
-
-  const deleteFolder = useCallback((id: string) => {
-    persist((prev) => {
-      const fallback = prev.folders.find((f) => f.id !== id)?.id ?? "";
-      return {
+  const updateRecipeById = useCallback(
+    (id: string, draft: RecipeDraft) => {
+      persistAndSync((prev) => ({
         ...prev,
-        folders: prev.folders.filter((f) => f.id !== id),
-        recipes: prev.recipes.map((r) =>
-          r.folderId === id ? { ...r, folderId: fallback } : r,
-        ),
+        recipes: prev.recipes.map((r) => (r.id === id ? updateRecipe(r, draft) : r)),
+      }));
+    },
+    [persistAndSync],
+  );
+
+  const deleteRecipe = useCallback(
+    (id: string) => {
+      persistAndSync((prev) => ({
+        ...prev,
+        recipes: prev.recipes.filter((r) => r.id !== id),
+      }));
+    },
+    [persistAndSync],
+  );
+
+  const addLabel = useCallback(
+    (name: string) => {
+      const label: Label = { id: createId(), name: name.trim() };
+      persistAndSync((prev) => ({ ...prev, labels: [...prev.labels, label] }));
+      return label;
+    },
+    [persistAndSync],
+  );
+
+  const updateLabel = useCallback(
+    (id: string, name: string) => {
+      persistAndSync((prev) => ({
+        ...prev,
+        labels: prev.labels.map((l) => (l.id === id ? { ...l, name: name.trim() } : l)),
+      }));
+    },
+    [persistAndSync],
+  );
+
+  const deleteLabel = useCallback(
+    (id: string) => {
+      persistAndSync((prev) => ({
+        ...prev,
+        labels: prev.labels.filter((l) => l.id !== id),
+        recipes: prev.recipes.map((r) => ({
+          ...r,
+          labelIds: r.labelIds.filter((lid) => lid !== id),
+        })),
+      }));
+    },
+    [persistAndSync],
+  );
+
+  const addFolder = useCallback(
+    (label: string, icon: string) => {
+      const folder: Folder = {
+        id: createId(),
+        label: label.trim(),
+        icon: icon.trim() || "📁",
+        order: 0,
       };
-    });
-  }, [persist]);
+      persistAndSync((prev) => ({
+        ...prev,
+        folders: sortFolders([
+          ...prev.folders.map((f) => ({ ...f, order: f.order + 1 })),
+          folder,
+        ]),
+      }));
+      return folder;
+    },
+    [persistAndSync],
+  );
+
+  const updateFolder = useCallback(
+    (id: string, label: string, icon: string) => {
+      persistAndSync((prev) => ({
+        ...prev,
+        folders: prev.folders.map((f) =>
+          f.id === id ? { ...f, label: label.trim(), icon: icon.trim() || "📁" } : f,
+        ),
+      }));
+    },
+    [persistAndSync],
+  );
+
+  const deleteFolder = useCallback(
+    (id: string) => {
+      persistAndSync((prev) => {
+        const fallback = prev.folders.find((f) => f.id !== id)?.id ?? "";
+        return {
+          ...prev,
+          folders: prev.folders.filter((f) => f.id !== id),
+          recipes: prev.recipes.map((r) =>
+            r.folderId === id ? { ...r, folderId: fallback } : r,
+          ),
+        };
+      });
+    },
+    [persistAndSync],
+  );
+
+  const reorderFolders = useCallback(
+    (orderedIds: string[]) => {
+      persistAndSync((prev) => ({
+        ...prev,
+        folders: sortFolders(
+          prev.folders.map((folder) => ({
+            ...folder,
+            order: orderedIds.indexOf(folder.id),
+          })),
+        ),
+      }));
+    },
+    [persistAndSync],
+  );
+
+  // ─── Context value ────────────────────────────────────────────────────────
 
   const value = useMemo(
     () => ({
