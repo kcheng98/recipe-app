@@ -65,7 +65,19 @@ export function subscribeToCloudData(
 
 function normalizeAppData(raw: AppData): AppData {
   return {
-    recipes: raw.recipes ?? defaultAppData.recipes,
+    recipes: (raw.recipes ?? defaultAppData.recipes).map((recipe) => ({
+      ...recipe,
+      // Existing field normalization patterns
+      prepTime: recipe.prepTime ?? "",
+      cookTime: recipe.cookTime ?? "",
+      totalTime: recipe.totalTime ?? "",
+      yields: (recipe as unknown as Record<string, string>)["servings"] ?? recipe.yields ?? "",
+      
+      // New field normalization to prevent uncontrolled input errors on older items
+      notes: recipe.notes ?? "",
+      author: recipe.author ?? "",
+      recipeSite: recipe.recipeSite ?? "",
+    })),
     labels: raw.labels ?? [],
     folders: (raw.folders ?? defaultAppData.folders).map((folder, index) => ({
       ...folder,

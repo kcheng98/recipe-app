@@ -143,15 +143,6 @@ export default function RecipeForm({
               ))}
             </select>
           </div>
-          <div>
-            <label className={labelClass}>Short description (for cards)</label>
-            <input
-              className={inputClass}
-              value={draft.description}
-              onChange={(e) => update("description", e.target.value)}
-              placeholder="One line summary"
-            />
-          </div>
         </div>
       </section>
 
@@ -275,24 +266,51 @@ export default function RecipeForm({
               onChange={(e) => update("instructions", e.target.value)}
             />
           </div>
+          <div>
+            <label className={labelClass}>Notes (optional)</label>
+            <textarea
+              className={inputClass + " min-h-[100px] resize-y"}
+              value={draft.notes}
+              onChange={(e) => update("notes", e.target.value)}
+              placeholder="Any personal notes, substitutions, tips…"
+            />
+          </div>
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-3 pb-8">
-        <button
-          type="submit"
-          className="rounded-xl bg-[#0071e3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#0077ed]"
-        >
-          {submitLabel}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-xl bg-white px-6 py-3 text-sm font-medium text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:bg-[#f5f5f7]"
-        >
-          Cancel
-        </button>
-      </div>
+      <section className="rounded-2xl bg-white p-6 ring-1 ring-[#e5e5ea]">
+        <h2 className="mb-1 text-lg font-semibold text-[#1d1d1f]">Source</h2>
+        <p className="mb-4 text-sm text-[#86868b]">Optional — for citing the original recipe.</p>
+        <div className="space-y-4">
+          <div>
+            <label className={labelClass}>Author</label>
+            <input
+              className={inputClass}
+              value={draft.author}
+              onChange={(e) => update("author", e.target.value)}
+              placeholder="e.g. Melissa Clark"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Site</label>
+            <input
+              className={inputClass}
+              value={draft.recipeSite}
+              onChange={(e) => update("recipeSite", e.target.value)}
+              placeholder="e.g. NYT Cooking"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>URL</label>
+            <input
+              className={inputClass}
+              value={draft.sourceUrl ?? ""}
+              onChange={(e) => update("sourceUrl", e.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+        </div>
+      </section>
     </form>
     </>
   );

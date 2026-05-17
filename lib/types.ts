@@ -11,6 +11,9 @@ export type Recipe = {
   yields: string;
   ingredients: string;
   instructions: string;
+  notes: string;
+  author: string;
+  recipeSite: string;
   labelIds: string[];
   folderId: string;
   sourceType: SourceType;

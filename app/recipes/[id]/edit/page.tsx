@@ -61,18 +61,30 @@ export default function EditRecipePage() {
               Edit recipe
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm("Delete this recipe permanently?")) {
-                deleteRecipe(id);
-                router.push("/");
-              }
-            }}
-            className="shrink-0 rounded-xl px-4 py-2 text-sm text-red-600 ring-1 ring-red-200 hover:bg-red-50"
-          >
-            Delete
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!draft.title.trim()) return;
+                updateRecipeById(id, {
+                  ...draft,
+                  title: draft.title.trim(),
+                  description: draft.description.trim() || draft.title.trim(),
+                });
+                router.push(`/recipes/${id}`);
+              }}
+              className="shrink-0 rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0077ed]"
+            >
+              Save changes
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/recipes/${id}`)}
+              className="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:bg-[#f5f5f7]"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </header>
 
@@ -92,6 +104,21 @@ export default function EditRecipePage() {
           }}
           onCancel={() => router.push(`/recipes/${id}`)}
         />
+
+        <div className="mx-auto max-w-3xl pb-8">
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm("Delete this recipe permanently?")) {
+                deleteRecipe(id);
+                router.push("/");
+              }
+            }}
+            className="mt-4 w-full rounded-xl px-4 py-3 text-sm text-red-600 ring-1 ring-red-200 hover:bg-red-50"
+          >
+            Delete recipe
+          </button>
+        </div>
       </main>
     </div>
   );

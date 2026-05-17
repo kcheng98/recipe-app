@@ -28,20 +28,17 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
           )}
         </div>
         <div className="p-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-[17px] font-semibold leading-snug text-[#1d1d1f]">
-              {recipe.title}
-            </h3>
-            {recipe.cookTime ? (
-              <span className="shrink-0 text-xs text-[#86868b]">
-                {recipe.cookTime}
-              </span>
-            ) : null}
-          </div>
-          <p className="mb-3 line-clamp-2 text-sm leading-relaxed text-[#6e6e73]">
-            {recipe.description}
-          </p>
-          {recipeLabels.length > 0 && (
+          <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-[17px] font-semibold leading-snug text-[#1d1d1f]">
+            {recipe.title}
+          </h3>
+          {recipe.totalTime ? (
+            <span className="shrink-0 text-xs text-[#86868b]">
+              ⏱ {recipe.totalTime}
+            </span>
+          ) : null}
+        </div>
+        {recipeLabels.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {recipeLabels.map((label) => (
                 <span

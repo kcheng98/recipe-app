@@ -136,6 +136,38 @@ export default function CookModePage() {
             })()}
           </ol>
         </section>
+
+        {recipe.notes ? (
+          <section className="mt-10">
+            <h2 className="mb-4 text-xl font-semibold">Notes</h2>
+            <div className="rounded-2xl bg-[#f5f5f7] px-5 py-4 text-[17px] leading-relaxed text-[#515154] whitespace-pre-wrap">
+              {recipe.notes}
+            </div>
+          </section>
+        ) : null}
+
+        {(recipe.author || recipe.recipeSite || recipe.sourceUrl) ? (
+          <section className="mt-10 border-t border-[#e5e5ea] pt-6">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">Source</p>
+            <div className="mt-2 space-y-1 text-sm text-[#515154]">
+              {recipe.author ? <p>Author: {recipe.author}</p> : null}
+              {recipe.recipeSite ? <p>Site: {recipe.recipeSite}</p> : null}
+              {recipe.sourceUrl ? (
+                <p>
+                  URL:{" "}
+                  <a
+                    href={recipe.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#0071e3] underline-offset-2 hover:underline"
+                  >
+                    {recipe.sourceUrl}
+                  </a>
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
       </main>
 
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[#e5e5ea] bg-white/95 px-4 py-3 backdrop-blur-md">
