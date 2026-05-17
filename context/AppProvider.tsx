@@ -64,65 +64,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = getSupabase();
-
+  
     if (!supabase) {
       setData(loadAppData());
       setSyncStatus("local");
       setReady(true);
       return;
     }
-
+  
     let unsubscribeRealtime: (() => void) | undefined;
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        setSyncStatus("syncing");
-        try {
-          const cloud = await fetchCloudData(currentUser.id);
-          const local = loadAppData();
-
-          if (cloud) {
-            setData(cloud);
-            saveAppData(cloud);
-          } else if (local.recipes.length > 0) {
-            setData(local);
-            await saveCloudData(currentUser.id, local);
-          } else {
-            setData(defaultAppData);
-          }
-
-          unsubscribeRealtime = subscribeToCloudData(currentUser.id, (fresh) => {
-            skipNextSave.current = true;
-            setData(fresh);
-            saveAppData(fresh);
-          });
-
-          setSyncStatus("synced");
-        } catch {
-          setData(loadAppData());
-          setSyncStatus("offline");
-        }
-      } else {
+  
+    async function loadForUser(currentUser: User | null) {
+      if (!currentUser) {
         setData(loadAppData());
         setSyncStatus("local");
+        setReady(true);
+        return;
       }
-
-      setReady(true);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (!session?.user) {
-        unsubscribeRealtime?.();
-        setSyncStatus("local");
+  
+      setSyncStatus("syncing");
+      try {
+        const cloud = await fetchCloudData(currentUser.id);
+  
+        if (cloud) {
+          // Cloud is the source of truth — ALWAYS prefer it
+          setData(cloud);
+          saveAppData(cloud);
+        } else {
+          // No cloud row exists yet — push local up once
+          const local = loadAppData();
+          const seed = local.recipes.length > 0 ? local : defaultAppData;
+          setData(seed);
+          await saveCloudData(currentUser.id, seed);
+        }
+  
+        unsubscribeRealtime = subscribeToCloudData(currentUser.id, (fresh) => {
+          skipNextSave.current = true;
+          setData(fresh);
+          saveAppData(fresh);
+        });
+  
+        setSyncStatus("synced");
+      } catch {
+        // Network failed — use localStorage as read-only fallback, never write back
+        setData(loadAppData());
+        setSyncStatus("offline");
+      } finally {
+        setReady(true);
       }
+    }
+  
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      loadForUser(currentUser);
     });
-
+  
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (!currentUser) {
+          unsubscribeRealtime?.();
+          setSyncStatus("local");
+        } else {
+          // Re-fetch cloud when auth state changes (new tab, sign-in, token refresh)
+          unsubscribeRealtime?.();
+          loadForUser(currentUser);
+        }
+      }
+    );
+  
     return () => {
       subscription.unsubscribe();
       unsubscribeRealtime?.();

@@ -42,16 +42,20 @@ export function subscribeToCloudData(
   if (!supabase) return () => {};
 
   const channel = supabase
-    .channel(`recipe_library:${userId}`)
+    .channel(`recipe_library_${userId}`)
     .on(
       "postgres_changes",
       {
         event: "*",
         schema: "public",
         table: TABLE,
-        filter: `user_id=eq.${userId}`,
+        // Remove the filter — receive all changes, then check userId in handler
       },
-      async () => {
+      async (payload) => {
+        // Only process rows that belong to this user
+        const row = payload.new as { user_id?: string } | undefined;
+        if (row?.user_id && row.user_id !== userId) return;
+
         const fresh = await fetchCloudData(userId);
         if (fresh) onUpdate(fresh);
       },
