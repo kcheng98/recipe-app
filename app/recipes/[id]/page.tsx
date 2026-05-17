@@ -79,12 +79,31 @@ export default function CookModePage() {
           ) : null}
         </div>
 
-        {recipeLabels.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
+        {/* System Pillars & Custom Labels prioritized block */}
+        {(recipe.proteinType || recipe.vibe || recipeLabels.length > 0) ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {/* 1. Protein Type Pillar Badge */}
+            {recipe.proteinType && (
+              <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-600 ring-1 ring-orange-500/10">
+                {recipe.proteinType === "vegetarian" ? "🌱 Veg / Vegan" : 
+                 recipe.proteinType === "poultry" ? "🍗 Poultry" :
+                 recipe.proteinType === "fish-seafood" ? "🐟 Fish / Seafood" : "🥩 Red Meat"}
+              </span>
+            )}
+
+            {/* 2. Mood/Seasonal Vibe Pillar Badge */}
+            {recipe.vibe && (
+              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 ring-1 ring-blue-500/10">
+                {recipe.vibe === "light-fresh" ? "🌿 Light & Fresh" :
+                 recipe.vibe === "all-weather" ? "☁️ All-Weather" : "🍲 Heavy & Rich"}
+              </span>
+            )}
+
+            {/* 3. User-Defined Custom Labels */}
             {recipeLabels.map((label) => (
               <span
                 key={label.id}
-                className="rounded-full bg-[#f5f5f7] px-3 py-1 text-xs font-medium text-[#515154]"
+                className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#515154]"
               >
                 {label.name}
               </span>

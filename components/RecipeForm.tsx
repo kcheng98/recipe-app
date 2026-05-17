@@ -6,6 +6,7 @@ import RecipeImage from "@/components/RecipeImage";
 import { useApp } from "@/context/AppProvider";
 import type { RecipeDraft } from "@/lib/types";
 import { readFileAsDataUrl } from "@/lib/recipeUtils";
+import { PillarFieldEditors } from "@/components/PillarFieldEditors";
 
 type RecipeFormProps = {
   draft: RecipeDraft;
@@ -311,6 +312,11 @@ export default function RecipeForm({
           </div>
         </div>
       </section>
+
+      <PillarFieldEditors 
+        draft={draft} 
+        onChange={(patch) => onChange({ ...draft, ...patch })} 
+      />
     </form>
     </>
   );

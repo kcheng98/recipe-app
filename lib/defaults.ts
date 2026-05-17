@@ -14,4 +14,6 @@ export const defaultAppData: AppData = {
   recipes: [],
   labels: [],
   folders: defaultFolders,
+  plannerConfig: null,  // null triggers onboarding intercept
+  mealPlan: null,
 };

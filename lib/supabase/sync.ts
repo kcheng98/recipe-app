@@ -71,21 +71,26 @@ function normalizeAppData(raw: AppData): AppData {
   return {
     recipes: (raw.recipes ?? defaultAppData.recipes).map((recipe) => ({
       ...recipe,
-      // Existing field normalization patterns
       prepTime: recipe.prepTime ?? "",
       cookTime: recipe.cookTime ?? "",
       totalTime: recipe.totalTime ?? "",
       yields: (recipe as unknown as Record<string, string>)["servings"] ?? recipe.yields ?? "",
-      
-      // New field normalization to prevent uncontrolled input errors on older items
       notes: recipe.notes ?? "",
       author: recipe.author ?? "",
       recipeSite: recipe.recipeSite ?? "",
+      // ── Pillar defaults for existing recipes ──
+      proteinType: recipe.proteinType ?? "none",
+      lastCookedAt: recipe.lastCookedAt ?? null,
+      vibe: recipe.vibe ?? "all-weather",
+      supportedStores: recipe.supportedStores ?? ["Standard"],
     })),
     labels: raw.labels ?? [],
     folders: (raw.folders ?? defaultAppData.folders).map((folder, index) => ({
       ...folder,
       order: typeof folder.order === "number" ? folder.order : index,
     })),
+    // ── Planner fields ──
+    plannerConfig: raw.plannerConfig ?? null,
+    mealPlan: raw.mealPlan ?? null,
   };
 }

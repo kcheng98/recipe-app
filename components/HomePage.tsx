@@ -8,6 +8,7 @@ import RecipeCard from "@/components/RecipeCard";
 import SearchBar from "@/components/SearchBar";
 import Sidebar from "@/components/Sidebar";
 import TagFilter from "@/components/TagFilter";
+import { PlannerOnboarding } from "@/components/planner/PlannerOnboarding";
 import { useApp } from "@/context/AppProvider";
 import { ALL_FOLDER_ID } from "@/lib/defaults";
 
@@ -19,6 +20,7 @@ export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [foldersModalOpen, setFoldersModalOpen] = useState(false);
   const [labelsModalOpen, setLabelsModalOpen] = useState(false);
+  const [plannerOnboardingOpen, setPlannerOnboardingOpen] = useState(false);
 
   const labelFilterOptions = useMemo(
     () => ["all", ...labels.map((l) => l.id)],
@@ -81,6 +83,7 @@ export default function HomePage() {
         onClose={() => setSidebarOpen(false)}
         onManageFolders={() => setFoldersModalOpen(true)}
         onManageLabels={() => setLabelsModalOpen(true)}
+        onAdjustPlanner={() => setPlannerOnboardingOpen(true)}
       />
 
       <ManageFoldersModal
@@ -91,40 +94,42 @@ export default function HomePage() {
         open={labelsModalOpen}
         onClose={() => setLabelsModalOpen(false)}
       />
+      <PlannerOnboarding
+        open={plannerOnboardingOpen}
+        onClose={() => setPlannerOnboardingOpen(false)}
+      />
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-3 lg:hidden">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Open folders"
-                onClick={() => setSidebarOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1d1d1f] shadow-sm ring-1 ring-[#e5e5ea]"
+            <button
+              type="button"
+              aria-label="Open folders"
+              onClick={() => setSidebarOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1d1d1f] shadow-sm ring-1 ring-[#e5e5ea]"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  aria-hidden
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              </button>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">
-                  Our Recipes
-                </p>
-                <p className="text-sm font-semibold text-[#1d1d1f]">
-                  {activeFolderLabel}
-                </p>
-              </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">
+                Our Recipes
+              </p>
+              <p className="text-sm font-semibold text-[#1d1d1f]">
+                {activeFolderLabel}
+              </p>
             </div>
             <Link
               href="/recipes/new"

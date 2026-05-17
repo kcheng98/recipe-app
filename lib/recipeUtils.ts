@@ -18,6 +18,11 @@ export function emptyDraft(folderId: string): RecipeDraft {
     labelIds: [],
     folderId,
     sourceType: "manual",
+    // ── Pillar defaults ──
+    proteinType: "none",
+    lastCookedAt: null,
+    vibe: "all-weather",
+    supportedStores: ["Standard"],
   };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useApp } from "@/context/AppProvider";
 import { ALL_FOLDER_ID } from "@/lib/defaults";
 import type { Folder } from "@/lib/types";
@@ -13,6 +14,7 @@ type SidebarProps = {
   onClose: () => void;
   onManageFolders: () => void;
   onManageLabels: () => void;
+  onAdjustPlanner?: () => void;
 };
 
 export default function Sidebar({
@@ -23,12 +25,17 @@ export default function Sidebar({
   onClose,
   onManageFolders,
   onManageLabels,
+  onAdjustPlanner,
 }: SidebarProps) {
-  const { user, syncStatus, cloudEnabled } = useApp();
+  const { user, syncStatus, cloudEnabled, plannerConfig } = useApp();
+  const pathname = usePathname();
+
   const allFolders = [
     { id: ALL_FOLDER_ID, label: "All Recipes", icon: "📚" },
     ...folders,
   ];
+
+  const isPlannerActive = pathname === "/planner";
 
   return (
     <>
@@ -42,34 +49,60 @@ export default function Sidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[#e5e5ea] bg-white/95 backdrop-blur-xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[#e5e5ea] bg-white transition-transform lg:static lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-[#e5e5ea] px-5 py-5">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-[#1d1d1f]">
-              Homemade
-            </h1>
-            <p className="text-sm text-[#86868b]">Kenzi &amp; Martin</p>
-          </div>
-          <button
-            type="button"
-            aria-label="Close sidebar"
-            className="rounded-lg p-2 text-[#86868b] hover:bg-[#f5f5f7] lg:hidden"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+        <div className="flex h-16 items-center px-6">
+          <h1 className="text-xl font-bold tracking-tight text-[#1d1d1f]">
+            Kitchen Library
+          </h1>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {/* ── Meal Planner ──────────────────────────────────────────────── */}
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
+            Planner
+          </p>
+          <ul className="space-y-0.5 mb-4">
+            <li>
+              <Link
+                href="/planner"
+                onClick={onClose}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
+                  isPlannerActive
+                    ? "bg-[#e8f2fc] font-medium text-[#0071e3]"
+                    : "text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                }`}
+              >
+                <span className="text-lg">📅</span>
+                <span className="truncate">Meal Planner</span>
+              </Link>
+            </li>
+            {plannerConfig && onAdjustPlanner && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAdjustPlanner();
+                    onClose();
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition"
+                >
+                  <span className="text-lg">⚙️</span>
+                  <span className="truncate">Adjust Planner</span>
+                </button>
+              </li>
+            )}
+          </ul>
+
+          {/* ── Folders ───────────────────────────────────────────────────── */}
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
             Folders
           </p>
           <ul className="space-y-0.5">
             {allFolders.map((folder) => {
-              const isActive = folder.id === activeFolder;
+              const isActive = !isPlannerActive && folder.id === activeFolder;
               return (
                 <li key={folder.id}>
                   <button
@@ -84,16 +117,13 @@ export default function Sidebar({
                         : "text-[#1d1d1f] hover:bg-[#f5f5f7]"
                     }`}
                   >
-                    <span className="text-lg" aria-hidden>
-                      {folder.icon}
-                    </span>
-                    {folder.label}
+                    <span className="text-lg">{folder.icon}</span>
+                    <span className="truncate">{folder.label}</span>
                   </button>
                 </li>
               );
             })}
           </ul>
-
           <button
             type="button"
             onClick={onManageFolders}
@@ -127,13 +157,10 @@ export default function Sidebar({
                   ? "☁️ Syncing…"
                   : syncStatus === "offline"
                     ? "☁️ Offline — tap to account"
-                    : "☁️ Synced"
-                : "☁️ Sign in to sync devices"}
+                    : "☁️ Account & Settings"
+                : "☁️ Sign in to sync recipes"}
             </Link>
           ) : null}
-          <p className="mt-4 px-2 text-xs text-[#86868b]">
-            Private · Meal plan &amp; grocery list coming later
-          </p>
         </div>
       </aside>
     </>
