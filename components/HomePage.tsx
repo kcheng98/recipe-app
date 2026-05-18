@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useMemo, useState, useEffect } from "react";
 import ManageFoldersModal from "@/components/ManageFoldersModal";
 import ManageLabelsModal from "@/components/ManageLabelsModal";
 import RecipeCard from "@/components/RecipeCard";
@@ -15,10 +14,12 @@ import { ALL_FOLDER_ID } from "@/lib/defaults";
 export default function HomePage() {
   const { ready, recipes, labels, folders } = useApp();
   const [search, setSearch] = useState("");
-  const searchParams = useSearchParams();
-  const [activeFolder, setActiveFolder] = useState(
-    searchParams.get("folder") ?? ALL_FOLDER_ID,
-  );
+  const [activeFolder, setActiveFolder] = useState(ALL_FOLDER_ID);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const folder = params.get("folder");
+    if (folder) setActiveFolder(folder);
+  }, []);
   const [activeLabelId, setActiveLabelId] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [foldersModalOpen, setFoldersModalOpen] = useState(false);
