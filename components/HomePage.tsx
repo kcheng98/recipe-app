@@ -2,25 +2,27 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import ManageFoldersModal from "@/components/ManageFoldersModal";
 import ManageLabelsModal from "@/components/ManageLabelsModal";
 import RecipeCard from "@/components/RecipeCard";
 import SearchBar from "@/components/SearchBar";
 import Sidebar from "@/components/Sidebar";
 import TagFilter from "@/components/TagFilter";
-import { PlannerOnboarding } from "@/components/planner/PlannerOnboarding";
 import { useApp } from "@/context/AppProvider";
 import { ALL_FOLDER_ID } from "@/lib/defaults";
 
 export default function HomePage() {
   const { ready, recipes, labels, folders } = useApp();
   const [search, setSearch] = useState("");
-  const [activeFolder, setActiveFolder] = useState(ALL_FOLDER_ID);
+  const searchParams = useSearchParams();
+  const [activeFolder, setActiveFolder] = useState(
+    searchParams.get("folder") ?? ALL_FOLDER_ID,
+  );
   const [activeLabelId, setActiveLabelId] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [foldersModalOpen, setFoldersModalOpen] = useState(false);
   const [labelsModalOpen, setLabelsModalOpen] = useState(false);
-  const [plannerOnboardingOpen, setPlannerOnboardingOpen] = useState(false);
 
   const labelFilterOptions = useMemo(
     () => ["all", ...labels.map((l) => l.id)],
@@ -83,7 +85,6 @@ export default function HomePage() {
         onClose={() => setSidebarOpen(false)}
         onManageFolders={() => setFoldersModalOpen(true)}
         onManageLabels={() => setLabelsModalOpen(true)}
-        onAdjustPlanner={() => setPlannerOnboardingOpen(true)}
       />
 
       <ManageFoldersModal
@@ -94,10 +95,7 @@ export default function HomePage() {
         open={labelsModalOpen}
         onClose={() => setLabelsModalOpen(false)}
       />
-      <PlannerOnboarding
-        open={plannerOnboardingOpen}
-        onClose={() => setPlannerOnboardingOpen(false)}
-      />
+
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">

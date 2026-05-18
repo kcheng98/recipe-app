@@ -29,6 +29,7 @@
 import { useState } from "react";
 import { useApp } from "@/context/AppProvider";
 import { PlannerOnboarding } from "./PlannerOnboarding";
+import Sidebar from "@/components/Sidebar";
 import type { MealSlot, Recipe } from "@/lib/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -178,12 +179,14 @@ export function MealPlannerView() {
     mealPlan,
     plannerConfig,
     recipes,
+    folders,
     generateMealPlan,
     lockSlot,
     swapSlot,
   } = useApp();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // If no config yet, show nothing — the onboarding intercept handles this
   if (!plannerConfig) return null;
@@ -204,12 +207,35 @@ export function MealPlannerView() {
 
   return (
     <>
-      <div className="max-w-lg mx-auto px-4 py-6">
+      <div className="flex min-h-screen">
+        <Sidebar
+          folders={folders}
+          activeFolder=""
+          onFolderSelect={() => {}}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onManageFolders={() => {}}
+          onManageLabels={() => {}}
+        />
+        <div className="flex-1 min-w-0">
+        <div className="max-w-lg mx-auto px-4 py-6">
         {/* Header row */}
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Meal Plan</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Week of {weekLabel}</p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="Open menu"
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1d1d1f] shadow-sm ring-1 ring-[#e5e5ea]"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Meal Plan</h1>
+              <p className="text-xs text-gray-400 mt-0.5">Week of {weekLabel}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -265,6 +291,8 @@ export function MealPlannerView() {
             {plannerConfig.daysPerWeek} dinners/week ·{" "}
             {plannerConfig.enabledStores.join(", ")} stores
           </p>
+        </div>
+        </div>
         </div>
       </div>
 

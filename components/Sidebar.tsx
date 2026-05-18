@@ -14,7 +14,6 @@ type SidebarProps = {
   onClose: () => void;
   onManageFolders: () => void;
   onManageLabels: () => void;
-  onAdjustPlanner?: () => void;
 };
 
 export default function Sidebar({
@@ -25,9 +24,8 @@ export default function Sidebar({
   onClose,
   onManageFolders,
   onManageLabels,
-  onAdjustPlanner,
 }: SidebarProps) {
-  const { user, syncStatus, cloudEnabled, plannerConfig } = useApp();
+  const { user, syncStatus, cloudEnabled } = useApp();
   const pathname = usePathname();
 
   const allFolders = [
@@ -60,42 +58,6 @@ export default function Sidebar({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {/* ── Meal Planner ──────────────────────────────────────────────── */}
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-            Planner
-          </p>
-          <ul className="space-y-0.5 mb-4">
-            <li>
-              <Link
-                href="/planner"
-                onClick={onClose}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
-                  isPlannerActive
-                    ? "bg-[#e8f2fc] font-medium text-[#0071e3]"
-                    : "text-[#1d1d1f] hover:bg-[#f5f5f7]"
-                }`}
-              >
-                <span className="text-lg">📅</span>
-                <span className="truncate">Meal Planner</span>
-              </Link>
-            </li>
-            {plannerConfig && onAdjustPlanner && (
-              <li>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onAdjustPlanner();
-                    onClose();
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] text-[#1d1d1f] hover:bg-[#f5f5f7] transition"
-                >
-                  <span className="text-lg">⚙️</span>
-                  <span className="truncate">Adjust Planner</span>
-                </button>
-              </li>
-            )}
-          </ul>
-
           {/* ── Folders ───────────────────────────────────────────────────── */}
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
             Folders
@@ -108,7 +70,11 @@ export default function Sidebar({
                   <button
                     type="button"
                     onClick={() => {
-                      onFolderSelect(folder.id);
+                      if (isPlannerActive) {
+                        window.location.href = folder.id === ALL_FOLDER_ID ? "/" : `/?folder=${folder.id}`;
+                      } else {
+                        onFolderSelect(folder.id);
+                      }
                       onClose();
                     }}
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
@@ -131,6 +97,34 @@ export default function Sidebar({
           >
             + Manage folders
           </button>
+
+          {/* ── Workspace ─────────────────────────────────────────────────── */}
+          <p className="mt-6 mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
+            Workspace
+          </p>
+          <ul className="space-y-0.5">
+            <li>
+              <Link
+                href="/planner"
+                onClick={onClose}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
+                  isPlannerActive
+                    ? "bg-[#e8f2fc] font-medium text-[#0071e3]"
+                    : "text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                }`}
+              >
+                <span className="text-lg">📅</span>
+                <span className="truncate">Meal Planner</span>
+              </Link>
+            </li>
+            <li>
+              <span className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] text-[#c7c7cc] cursor-not-allowed">
+                <span className="text-lg">🛒</span>
+                <span className="truncate">Shopping List</span>
+                <span className="ml-auto text-xs text-[#c7c7cc]">Soon</span>
+              </span>
+            </li>
+          </ul>
         </nav>
 
         <div className="border-t border-[#e5e5ea] px-3 py-4">
