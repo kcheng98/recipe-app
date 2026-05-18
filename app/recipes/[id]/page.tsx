@@ -83,11 +83,13 @@ export default function CookModePage() {
         {(recipe.proteinType || recipe.vibe || recipeLabels.length > 0) ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {/* 1. Protein Type Pillar Badge */}
-            {recipe.proteinType && (
+            {recipe.proteinType && recipe.proteinType !== "none" && (
               <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-600 ring-1 ring-orange-500/10">
-                {recipe.proteinType === "vegetarian" ? "🌱 Veg / Vegan" : 
-                 recipe.proteinType === "poultry" ? "🍗 Poultry" :
-                 recipe.proteinType === "fish-seafood" ? "🐟 Fish / Seafood" : "🥩 Red Meat"}
+                {recipe.proteinType === "poultry" ? "🍗 Poultry" :
+                 recipe.proteinType === "fish-seafood" ? "🐟 Fish / Seafood" :
+                 recipe.proteinType === "red-meat" ? "🥩 Red Meat" :
+                 recipe.proteinType === "vegetarian" ? "🌱 Veg / Vegan" :
+                 recipe.proteinType === "vegan" ? "🌱 Veg / Vegan" : null}
               </span>
             )}
 
