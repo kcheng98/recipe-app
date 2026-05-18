@@ -1,124 +1,151 @@
-"use client";
+// ─── Existing types ───────────────────────────────────────────────────────────
 
-import Link from "next/link";
-import { useApp } from "@/context/AppProvider";
-import { ALL_FOLDER_ID } from "@/lib/defaults";
-import type { Folder } from "@/lib/types";
+export type SourceType = "manual" | "url" | "photo" | "pdf";
 
-type SidebarProps = {
-  folders: Folder[];
-  activeFolder: string;
-  onFolderSelect: (folderId: string) => void;
-  isOpen: boolean;
-  onClose: () => void;
-  onManageFolders: () => void;
-  onManageLabels: () => void;
+export type Recipe = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  prepTime: string;
+  cookTime: string;
+  totalTime: string;
+  yields: string;
+  ingredients: string;
+  instructions: string;
+  notes: string;
+  author: string;
+  recipeSite: string;
+  labelIds: string[];
+  folderId: string;
+  sourceType: SourceType;
+  sourceUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+
+  // ─── Meal Planner Pillar Fields ──────────────────────────────────────────
+  // Pillar A: what protein category this meal belongs to
+  proteinType: ProteinType;
+  // Pillar B: ISO timestamp of last time this was cooked (null = never)
+  lastCookedAt: string | null;
+  // Pillar C: seasonal mood/weight of the dish
+  vibe: MoodVibe;
+  // Pillar D: which store tiers are required to source this recipe
+  supportedStores: StoreTier[];
 };
 
-export default function Sidebar({
-  folders,
-  activeFolder,
-  onFolderSelect,
-  isOpen,
-  onClose,
-  onManageFolders,
-  onManageLabels,
-}: SidebarProps) {
-  const { user, syncStatus, cloudEnabled } = useApp();
-  const allFolders = [
-    { id: ALL_FOLDER_ID, label: "All Recipes", icon: "📚" },
-    ...folders,
-  ];
+export type Label = {
+  id: string;
+  name: string;
+};
 
-  return (
-    <>
-      {isOpen && (
-        <button
-          type="button"
-          aria-label="Close menu"
-          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden"
-          onClick={onClose}
-        />
-      )}
+export type Folder = {
+  id: string;
+  label: string;
+  icon: string;
+  order: number;
+};
 
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[#e5e5ea] bg-white transition-transform lg:static lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex h-16 items-center px-6">
-          <h1 className="text-xl font-bold tracking-tight text-[#1d1d1f]">
-            Kitchen Library
-          </h1>
-        </div>
+export type AppData = {
+  recipes: Recipe[];
+  labels: Label[];
+  folders: Folder[];
+  // Planner config and active week plan live here so they sync across devices
+  plannerConfig: PlannerConfig | null;
+  mealPlan: MealPlan | null;
+};
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-            Folders
-          </p>
-          <ul className="space-y-0.5">
-            {allFolders.map((folder) => {
-              const isActive = folder.id === activeFolder;
-              return (
-                <li key={folder.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onFolderSelect(folder.id);
-                      onClose();
-                    }}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
-                      isActive
-                        ? "bg-[#e8f2fc] font-medium text-[#0071e3]"
-                        : "text-[#1d1d1f] hover:bg-[#f5f5f7]"
-                    }`}
-                  >
-                    <span className="text-lg">{folder.icon}</span>
-                    <span className="truncate">{folder.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <button
-            type="button"
-            onClick={onManageFolders}
-            className="mt-2 w-full rounded-xl px-3 py-2 text-left text-sm text-[#0071e3] hover:bg-[#f5f5f7]"
-          >
-            + Manage folders
-          </button>
-        </nav>
+export type RecipeDraft = Omit<Recipe, "id" | "createdAt" | "updatedAt">;
 
-        <div className="border-t border-[#e5e5ea] px-3 py-4">
-          <button
-            type="button"
-            onClick={onManageLabels}
-            className="w-full rounded-xl px-3 py-2 text-left text-sm text-[#0071e3] hover:bg-[#f5f5f7]"
-          >
-            Manage labels
-          </button>
-          <Link
-            href="/recipes/new"
-            className="mt-2 flex w-full items-center justify-center rounded-xl bg-[#0071e3] py-3 text-sm font-semibold text-white hover:bg-[#0077ed]"
-          >
-            + Add recipe
-          </Link>
-          {cloudEnabled ? (
-            <Link
-              href="/login"
-              className="mt-3 block rounded-xl px-3 py-2 text-sm text-[#515154] hover:bg-[#f5f5f7]"
-            >
-              {user
-                ? syncStatus === "syncing"
-                  ? "☁️ Syncing…"
-                  : syncStatus === "offline"
-                    ? "☁️ Offline — tap to account"
-                    : "☁️ Account & Settings"
-                : "☁️ Sign in to sync recipes"}
-            </Link>
-          ) : null}
-        </div>
-      </aside>
-    </>
-  );
-}
+export type ImportedRecipe = Partial<RecipeDraft> & {
+  title?: string;
+};
+
+// ─── Meal Planner Types ───────────────────────────────────────────────────────
+
+/** Pillar A — protein categories used for weekly distribution balancing */
+export type ProteinType =
+  | "poultry"
+  | "fish-seafood"
+  | "red-meat"
+  | "vegetarian"
+  | "vegan"
+  | "none";
+
+/** Pillar C — seasonal/mood weight of a dish, used for weather filtering */
+export type MoodVibe = "light-fresh" | "heavy-rich" | "all-weather";
+
+/** Pillar D — which retail channels are needed to source a recipe */
+export type StoreTier = "Standard" | "Asian" | "Premium";
+
+/**
+ * The user's saved planner preferences.
+ * Set once during onboarding, editable any time via the "Adjust Planner" modal.
+ */
+export type PlannerConfig = {
+  /** How many days per week to plan meals for (3–7) */
+  daysPerWeek: number;
+
+  /**
+   * Target protein counts for the week.
+   * The values must sum to daysPerWeek.
+   * e.g. { poultry: 2, "fish-seafood": 1, "red-meat": 1, vegetarianVegan: 0 }
+   */
+  proteinTargets: ProteinTargets;
+
+  /** Which store tiers the user is shopping at this week */
+  enabledStores: StoreTier[];
+};
+
+/**
+ * Weekly protein distribution targets.
+ * vegetarianVegan is a single counter covering both vegetarian + vegan recipes,
+ * matching the onboarding UI (they share one counter per the spec).
+ */
+export type ProteinTargets = {
+  poultry: number;
+  "fish-seafood": number;
+  "red-meat": number;
+  vegetarianVegan: number;
+};
+
+/**
+ * A single planned meal slot in the week.
+ * One slot = one day's dinner.
+ */
+export type MealSlot = {
+  /** ISO date string for the calendar day, e.g. "2026-05-19" */
+  date: string;
+  /** The recipe assigned to this slot, or null if empty */
+  recipeId: string | null;
+  /** True if the user manually pinned this slot — skipped by auto-regeneration */
+  isLocked: boolean;
+  /**
+   * Confirmation status of whether the meal was actually cooked.
+   * - "pending"   = planned but not yet confirmed (default for future/today)
+   * - "cooked"    = user confirmed they made it
+   * - "skipped"   = user confirmed they skipped it
+   * - "untracked" = slot was never assigned a recipe
+   */
+  status: "pending" | "cooked" | "skipped" | "untracked";
+};
+
+/**
+ * The active week's meal plan.
+ * Stored in AppData so it syncs to Supabase alongside recipes.
+ */
+export type MealPlan = {
+  /** ISO date string of the Monday that starts this plan week */
+  weekStart: string;
+  /** Ordered array of slots, one per planned day */
+  slots: MealSlot[];
+};
+
+/**
+ * A recipe's computed score during the recommendation algorithm.
+ * Used internally by the scoring engine — never persisted.
+ */
+export type ScoredRecipe = {
+  recipe: Recipe;
+  score: number;
+};
