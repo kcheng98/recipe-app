@@ -89,6 +89,15 @@ type AppContextValue = {
    * Called by CookConfirmIntercept when the user taps confirm/skip.
    */
   confirmSlot: (date: string, cooked: boolean) => void;
+  /** Clear the recipe from a slot (the ✕ skip action on the tile). */
+  skipSlot: (date: string) => void;
+  /** Directly assign a recipe to a slot (from RecipePickerModal). */
+  assignSlot: (date: string, recipeId: string) => void;
+  /**
+   * Insert a telemetry-confirmed cook into the plan as a history slot.
+   * Used by CookConfirmIntercept when the user cooked something unplanned.
+   */
+  insertHistorySlot: (date: string, recipeId: string) => void;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -403,7 +412,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lockedSlots,
         );
 
-        return { ...prev, mealPlan: freshPlan };
+        // Preserve any past slots from the existing plan (history should
+        // never be wiped by a regeneration or rolling window advance)
+        const today = todayISO();
+        const pastSlots = prev.mealPlan?.slots.filter((s) => s.date < today) ?? [];
+        const mergedSlots = [
+          ...pastSlots,
+          ...freshPlan.slots.filter((s) => s.date >= today),
+        ].sort((a, b) => a.date.localeCompare(b.date));
+
+        return { ...prev, mealPlan: { ...freshPlan, slots: mergedSlots } };
       });
     },
     [persistAndSync],
@@ -482,7 +500,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           cooked && slot?.recipeId
             ? prev.recipes.map((r) =>
                 r.id === slot.recipeId
-                  ? { ...r, lastCookedAt: new Date().toISOString() }
+                ? { ...r, lastCookedAt: new Date(date + "T12:00:00").toISOString() }
                   : r,
               )
             : prev.recipes;
@@ -498,6 +516,108 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 : s,
             ),
           },
+        };
+      });
+    },
+    [persistAndSync],
+  );
+
+  // ─── Rolling window auto-advance ─────────────────────────────────────────
+  // On app load (once data is ready), ensure the meal plan window always starts
+  // 7 days back from today and extends forward by daysPerWeek. If the stored
+  // plan's weekStart is stale, regenerate from today's window.
+  useEffect(() => {
+    if (!ready) return;
+    if (!data.plannerConfig || !data.mealPlan) return;
+
+    const today = todayISO();
+    const expectedStart = (() => {
+      const d = new Date(today + "T00:00:00");
+      d.setDate(d.getDate() - 7);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+
+    // If the plan already starts at or after the expected window, leave it alone
+    if (data.mealPlan.weekStart >= expectedStart) return;
+
+    generateMealPlan(today);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  const skipSlot = useCallback(
+    (date: string) => {
+      persistAndSync((prev) => {
+        if (!prev.mealPlan) return prev;
+        return {
+          ...prev,
+          mealPlan: {
+            ...prev.mealPlan,
+            slots: prev.mealPlan.slots.map((s) =>
+              s.date === date
+                ? { ...s, recipeId: null, isLocked: false, status: "untracked" }
+                : s,
+            ),
+          },
+        };
+      });
+    },
+    [persistAndSync],
+  );
+
+  const assignSlot = useCallback(
+    (date: string, recipeId: string) => {
+      persistAndSync((prev) => {
+        if (!prev.mealPlan) return prev;
+        // If the date already exists as a slot, update it
+        const exists = prev.mealPlan.slots.some((s) => s.date === date);
+        const updatedSlots = exists
+          ? prev.mealPlan.slots.map((s) =>
+              s.date === date
+                ? { ...s, recipeId, status: "pending" as const }
+                : s,
+            )
+          : [
+              ...prev.mealPlan.slots,
+              { date, recipeId, isLocked: false, status: "pending" as const },
+            ].sort((a, b) => a.date.localeCompare(b.date));
+        return {
+          ...prev,
+          mealPlan: { ...prev.mealPlan, slots: updatedSlots },
+        };
+      });
+    },
+    [persistAndSync],
+  );
+
+  const insertHistorySlot = useCallback(
+    (date: string, recipeId: string) => {
+      persistAndSync((prev) => {
+        if (!prev.mealPlan) return prev;
+
+        // Stamp lastCookedAt on the recipe with the original date
+        const updatedRecipes = prev.recipes.map((r) =>
+          r.id === recipeId
+            ? { ...r, lastCookedAt: new Date(date + "T12:00:00").toISOString() }
+            : r,
+        );
+
+        // Upsert the slot as cooked
+        const exists = prev.mealPlan.slots.some((s) => s.date === date);
+        const updatedSlots = exists
+          ? prev.mealPlan.slots.map((s) =>
+              s.date === date
+                ? { ...s, recipeId, status: "cooked" as const }
+                : s,
+            )
+          : [
+              ...prev.mealPlan.slots,
+              { date, recipeId, isLocked: false, status: "cooked" as const },
+            ].sort((a, b) => a.date.localeCompare(b.date));
+
+        return {
+          ...prev,
+          recipes: updatedRecipes,
+          mealPlan: { ...prev.mealPlan, slots: updatedSlots },
         };
       });
     },
@@ -541,6 +661,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lockSlot,
       swapSlot,
       confirmSlot,
+      skipSlot,
+      assignSlot,
+      insertHistorySlot,
     }),
     [
       ready,
@@ -564,6 +687,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lockSlot,
       swapSlot,
       confirmSlot,
+      skipSlot,
+      assignSlot,
+      insertHistorySlot,
     ],
   );
 

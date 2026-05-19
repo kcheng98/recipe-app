@@ -29,6 +29,7 @@
 import { useState } from "react";
 import { useApp } from "@/context/AppProvider";
 import { PlannerOnboarding } from "./PlannerOnboarding";
+import { RecipePickerModal } from "./RecipePickerModal";
 import Sidebar from "@/components/Sidebar";
 import type { MealSlot, Recipe } from "@/lib/types";
 
@@ -48,14 +49,10 @@ function formatShort(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** Returns ISO date string of the Monday of the current week */
+/** Returns ISO date string for today */
 function getCurrentWeekStart(): string {
-  const today = new Date();
-  const day = today.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + diff);
-  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function addDays(iso: string, n: number): string {
@@ -77,11 +74,15 @@ function DayCard({
   recipe,
   onLock,
   onSwap,
+  onAdd,
+  onSkip,
 }: {
   slot: MealSlot;
   recipe: Recipe | null;
   onLock: () => void;
   onSwap: () => void;
+  onAdd: () => void;
+  onSkip: () => void;
 }) {
   const today = todayISO();
   const isPast = slot.date < today;
@@ -143,31 +144,49 @@ function DayCard({
         <div className="mt-1">{statusBadge()}</div>
       </div>
 
-      {/* Actions */}
-      {!isPast && (
-        <div className="flex flex-col gap-1.5 flex-shrink-0">
-          <button
-            onClick={onLock}
-            title={slot.isLocked ? "Unlock slot" : "Lock slot"}
-            className={`w-8 h-8 rounded-xl flex items-center justify-center text-base transition
-              ${slot.isLocked
-                ? "bg-orange-100 text-orange-500 hover:bg-orange-200"
-                : "bg-gray-100 text-gray-400 hover:bg-orange-50 hover:text-orange-400"}`}
-          >
-            {slot.isLocked ? "🔒" : "🔓"}
-          </button>
-          {!slot.isLocked && recipe && (
-            <button
-              onClick={onSwap}
-              title="Swap recipe"
-              className="w-8 h-8 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center
-                         hover:bg-blue-50 hover:text-blue-500 transition text-sm font-bold"
-            >
-              ↻
-            </button>
-          )}
-        </div>
-      )}
+      {/* Actions — horizontal row of 4, right-aligned */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Lock */}
+        <button
+          onClick={onLock}
+          title={slot.isLocked ? "Unlock slot" : "Lock slot"}
+          className={`w-8 h-8 rounded-xl flex items-center justify-center text-base transition
+            ${slot.isLocked
+              ? "bg-orange-100 text-orange-500 hover:bg-orange-200"
+              : "bg-gray-100 text-gray-400 hover:bg-orange-50 hover:text-orange-400"}`}
+        >
+          {slot.isLocked ? "🔒" : "🔓"}
+        </button>
+        {/* Shuffle — only if unlocked and has a recipe */}
+        <button
+          onClick={onSwap}
+          disabled={slot.isLocked || !recipe}
+          title="Swap recipe (same protein)"
+          className="w-8 h-8 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center
+                     hover:bg-blue-50 hover:text-blue-500 transition text-sm font-bold
+                     disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ↻
+        </button>
+        {/* Add — opens picker for any recipe */}
+        <button
+          onClick={onAdd}
+          title="Assign a recipe"
+          className="w-8 h-8 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center
+                     hover:bg-green-50 hover:text-green-500 transition text-lg leading-none"
+        >
+          ＋
+        </button>
+        {/* Skip — clears the slot after confirmation */}
+        <button
+          onClick={onSkip}
+          title="Skip this slot"
+          className="w-8 h-8 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center
+                     hover:bg-red-50 hover:text-red-400 transition text-sm font-bold"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
@@ -183,10 +202,12 @@ export function MealPlannerView() {
     generateMealPlan,
     lockSlot,
     swapSlot,
+    skipSlot,
   } = useApp();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pickerDate, setPickerDate] = useState<string | null>(null);
 
   // If no config yet, show nothing — the onboarding intercept handles this
   if (!plannerConfig) return null;
@@ -266,24 +287,50 @@ export function MealPlannerView() {
               Generate now →
             </button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {slots.map((slot) => {
-              const recipe = slot.recipeId
-                ? (recipes.find((r) => r.id === slot.recipeId) ?? null)
-                : null;
-              return (
-                <DayCard
-                  key={slot.date}
-                  slot={slot}
-                  recipe={recipe}
-                  onLock={() => lockSlot(slot.date)}
-                  onSwap={() => swapSlot(slot.date)}
-                />
-              );
-            })}
-          </div>
-        )}
+        ) : (() => {
+          const today = todayISO();
+          const historySlots = slots.filter((s) => s.date < today);
+          const upcomingSlots = slots.filter((s) => s.date >= today);
+
+          const renderCard = (slot: MealSlot) => {
+            const recipe = slot.recipeId
+              ? (recipes.find((r) => r.id === slot.recipeId) ?? null)
+              : null;
+            return (
+              <DayCard
+                key={slot.date}
+                slot={slot}
+                recipe={recipe}
+                onLock={() => lockSlot(slot.date)}
+                onSwap={() => swapSlot(slot.date)}
+                onAdd={() => setPickerDate(slot.date)}
+                onSkip={() => {
+                  if (confirm(`Skip ${formatDayLabel(slot.date)}? This will clear the assigned recipe.`)) {
+                    skipSlot(slot.date);
+                  }
+                }}
+              />
+            );
+          };
+
+          return (
+            <div className="flex flex-col gap-2">
+              {historySlots.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mt-1">
+                    Recent
+                  </p>
+                  {historySlots.map(renderCard)}
+                  <div className="border-t border-gray-100 my-2" />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">
+                    Upcoming
+                  </p>
+                </>
+              )}
+              {upcomingSlots.map(renderCard)}
+            </div>
+          );
+        })()}
 
         {/* Config summary footer */}
         <div className="mt-6 p-3 rounded-2xl bg-gray-50 border border-gray-100">
@@ -299,6 +346,10 @@ export function MealPlannerView() {
       <PlannerOnboarding
         open={showOnboarding}
         onClose={() => setShowOnboarding(false)}
+      />
+      <RecipePickerModal
+        date={pickerDate}
+        onClose={() => setPickerDate(null)}
       />
     </>
   );

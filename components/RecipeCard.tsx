@@ -7,7 +7,6 @@ type RecipeCardProps = {
   labels: Label[];
 };
 
-// Map values to display text/emojis matching your customized verbiage rules
 const PROTEIN_LABELS: Record<string, string> = {
   poultry: "🍗 Poultry",
   "fish-seafood": "🐟 Fish / Seafood",
@@ -21,8 +20,21 @@ const VIBE_LABELS: Record<string, string> = {
   "heavy-rich": "🍲 Heavy & Rich",
 };
 
+function daysSince(isoTimestamp: string): number {
+  return (Date.now() - new Date(isoTimestamp).getTime()) / (1000 * 60 * 60 * 24);
+}
+
+function lastCookedLabel(recipe: Recipe): string | null {
+  if (recipe.lastCookedAt === null) return null; // never been in planner
+  const days = Math.floor(daysSince(recipe.lastCookedAt));
+  if (days === 0) return "Last cooked: today";
+  if (days === 1) return "Last cooked: yesterday";
+  return `Last cooked: ${days} days ago`;
+}
+
 export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
   const recipeLabels = labels.filter((l) => recipe.labelIds.includes(l.id));
+  const cookedLabel = lastCookedLabel(recipe);
 
   return (
     <Link href={`/recipes/${recipe.id}`} className="block">
@@ -42,7 +54,7 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
           )}
         </div>
         <div className="p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
             <h3 className="text-[17px] font-semibold leading-snug text-[#1d1d1f]">
               {recipe.title}
             </h3>
@@ -52,25 +64,24 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
               </span>
             ) : null}
           </div>
-          
-          {/* Display section for combined System & Custom badges */}
+
+          {/* Last cooked line — only shown if recipe has planner history */}
+          {cookedLabel && (
+            <p className="text-xs text-[#86868b] mb-2">{cookedLabel}</p>
+          )}
+
           {(recipe.proteinType || recipe.vibe || recipeLabels.length > 0) && (
             <div className="flex flex-wrap gap-1.5">
-              {/* 1. Protein Type Pillar Label */}
               {recipe.proteinType && PROTEIN_LABELS[recipe.proteinType] && (
                 <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-600 ring-1 ring-orange-500/10">
                   {PROTEIN_LABELS[recipe.proteinType]}
                 </span>
               )}
-
-              {/* 2. Mood/Seasonal Vibe Pillar Label */}
               {recipe.vibe && VIBE_LABELS[recipe.vibe] && (
                 <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 ring-1 ring-blue-500/10">
                   {VIBE_LABELS[recipe.vibe]}
                 </span>
               )}
-
-              {/* 3. User-Defined Custom Labels */}
               {recipeLabels.map((label) => (
                 <span
                   key={label.id}

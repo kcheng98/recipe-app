@@ -33,12 +33,12 @@ import { getSeasonalVibe } from "./weather";
 // ─── Scoring constants ────────────────────────────────────────────────────────
 
 const RECENCY_BONUS = 20;       // cooked > 30 days ago (or never)
-const RECENCY_PENALTY = -100;   // cooked < 14 days ago
+const RECENCY_PENALTY = -100;   // cooked < 7 days ago
 const STORE_PENALTY = -100;     // required store not enabled (safety net)
 const ASIAN_BATCH_BONUS = 30;   // second+ Asian-store recipe in the same plan
 
 const RECENCY_BONUS_DAYS = 30;
-const RECENCY_PENALTY_DAYS = 14;
+const RECENCY_PENALTY_DAYS = 7;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -251,10 +251,17 @@ function allocateBuckets(
     }
   }
 
-  // Assign picks to open dates in order
+  // Shuffle picks before assigning to dates so the protein sequence varies
+  // week-over-week (e.g. poultry doesn't always land on the first open day).
+  const shuffledPicks = [...picks];
+  for (let i = shuffledPicks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledPicks[i], shuffledPicks[j]] = [shuffledPicks[j], shuffledPicks[i]];
+  }
+
   let pickIdx = 0;
   for (const date of openDates) {
-    assignments.set(date, picks[pickIdx] ?? null);
+    assignments.set(date, shuffledPicks[pickIdx] ?? null);
     pickIdx++;
   }
 

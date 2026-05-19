@@ -6,6 +6,7 @@ import RecipeImage from "@/components/RecipeImage";
 import { useApp } from "@/context/AppProvider";
 import { cleanRecipeLine } from "@/lib/cleanRecipeText";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { useSessionTracking } from "@/hooks/useSessionTracking";
 
 function splitLines(text: string): string[] {
   return text
@@ -21,6 +22,7 @@ export default function CookModePage() {
   const recipe = recipes.find((r) => r.id === id);
 
   useWakeLock(true);
+  useSessionTracking(recipe?.id);
 
   if (!ready) {
     return (
