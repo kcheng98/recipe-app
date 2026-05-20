@@ -10,6 +10,7 @@ import Sidebar from "@/components/Sidebar";
 import TagFilter from "@/components/TagFilter";
 import { useApp } from "@/context/AppProvider";
 import { ALL_FOLDER_ID } from "@/lib/defaults";
+import type { StoreTier } from "@/lib/types";
 
 export default function HomePage() {
   const { ready, recipes, labels, folders } = useApp();
@@ -56,7 +57,7 @@ export default function HomePage() {
   
       const matchesMarket =
         activeMarket === "all" ||
-        (recipe.supportedStores ?? ["Standard"]).includes(activeMarket);
+        (recipe.supportedStores ?? ["Standard"]).includes(activeMarket as StoreTier);
       
       const matchesProtein =
         activeProtein === "all" || recipe.proteinType === activeProtein;
