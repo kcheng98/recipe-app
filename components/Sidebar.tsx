@@ -147,12 +147,14 @@ export default function Sidebar({
               className="mt-3 block rounded-xl px-3 py-2 text-sm text-[#515154] hover:bg-[#f5f5f7]"
             >
               {user
-                ? syncStatus === "syncing"
+                ? syncStatus === "syncing" || syncStatus === "local"
                   ? "☁️ Syncing…"
                   : syncStatus === "offline"
-                    ? "☁️ Offline — tap to account"
+                    ? "☁️ Offline — tap to retry"
                     : "☁️ Account & Settings"
-                : "☁️ Sign in to sync recipes"}
+                : syncStatus === "local"
+                  ? "☁️ Syncing…"
+                  : "☁️ Sign in to sync recipes"}
             </Link>
           ) : null}
         </div>

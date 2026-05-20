@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import RecipeForm from "@/components/RecipeForm";
 import { useApp } from "@/context/AppProvider";
 import type { RecipeDraft } from "@/lib/types";
@@ -15,20 +15,17 @@ export default function EditRecipePage() {
 
   const recipe = recipes.find((r) => r.id === id);
 
-  const initialDraft = useMemo<RecipeDraft | null>(() => {
-    if (!recipe) return null;
-    const { id: _id, createdAt, updatedAt, ...draft } = recipe;
-    return draft;
-  }, [recipe]);
+  const [draft, setDraft] = useState<RecipeDraft | null>(null);
 
-  const [draft, setDraft] = useState<RecipeDraft | null>(initialDraft);
-
+  // Initialize draft exactly once when data is ready — never re-derived from
+  // live context so Supabase realtime updates can't wipe in-progress edits.
   useEffect(() => {
-    if (recipe) {
+    if (ready && recipe && draft === null) {
       const { id: _id, createdAt, updatedAt, ...nextDraft } = recipe;
       setDraft(nextDraft);
     }
-  }, [recipe]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   if (!ready) {
     return (
