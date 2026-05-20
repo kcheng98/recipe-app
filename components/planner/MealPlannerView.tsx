@@ -32,6 +32,7 @@ import { PlannerOnboarding } from "./PlannerOnboarding";
 import { RecipePickerModal } from "./RecipePickerModal";
 import Sidebar from "@/components/Sidebar";
 import type { MealSlot, Recipe } from "@/lib/types";
+import Link from "next/link";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,15 +130,19 @@ function DayCard({
         )}
       </div>
 
-      {/* Info */}
+      {/* Info — tapping navigates to recipe detail */}
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold text-gray-400 mb-0.5">
           {formatDayLabel(slot.date)}
         </p>
         {recipe ? (
-          <p className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2">
-            {recipe.title}
-          </p>
+          
+          <Link
+          href={`/recipes/${recipe.id}?from=planner`}
+          className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2 hover:text-orange-500 transition-colors"
+        >
+          {recipe.title}
+        </Link>
         ) : (
           <p className="text-sm text-gray-400 italic">No recipe assigned</p>
         )}

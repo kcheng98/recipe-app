@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import RecipeImage from "@/components/RecipeImage";
 import { useApp } from "@/context/AppProvider";
 import { cleanRecipeLine } from "@/lib/cleanRecipeText";
@@ -23,6 +23,8 @@ export default function CookModePage() {
 
   useWakeLock(true);
   useSessionTracking(recipe?.id);
+  const searchParams = useSearchParams();
+  const fromPlanner = searchParams.get("from") === "planner";
 
   if (!ready) {
     return (
@@ -50,9 +52,15 @@ export default function CookModePage() {
   return (
     <div className="min-h-screen bg-white pb-24 text-[#1d1d1f]">
       <header className="sticky top-0 z-20 border-b border-[#e5e5ea] bg-white/95 px-4 py-3 backdrop-blur-md">
-        <Link href="/" className="text-sm text-[#0071e3]">
-          ← Recipes
-        </Link>
+        {fromPlanner ? (
+          <Link href="/planner" className="text-sm text-[#0071e3]">
+            ← Meal Plan
+          </Link>
+        ) : (
+          <Link href="/" className="text-sm text-[#0071e3]">
+            ← Recipes
+          </Link>
+        )}
       </header>
 
       {recipe.imageUrl ? (

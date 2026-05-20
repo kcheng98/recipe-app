@@ -52,12 +52,10 @@ export default function HomePage() {
         .filter((l) => recipe.labelIds.includes(l.id))
         .map((l) => l.name);
 
-      const matchesSearch =
+        const matchesSearch =
         query === "" ||
         recipe.title.toLowerCase().includes(query) ||
-        recipe.description.toLowerCase().includes(query) ||
-        recipe.ingredients.toLowerCase().includes(query) ||
-        recipeLabelNames.some((name) => name.toLowerCase().includes(query));
+        recipe.description.toLowerCase().includes(query);
 
       return matchesFolder && matchesLabel && matchesSearch;
     });
