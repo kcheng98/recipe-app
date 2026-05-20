@@ -113,20 +113,22 @@ function buildQueue(
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function CookConfirmIntercept({ onDone }: Props) {
-  const { pendingConfirmations, confirmSlot, insertHistorySlot, recipes } = useApp();
+  const { ready, pendingConfirmations, confirmSlot, insertHistorySlot, recipes } = useApp();
 
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [animating, setAnimating] = useState(false);
   const initialized = useRef(false);
 
-  // Build the queue once on mount (not reactive — we don't want it to rebuild
-  // mid-session as confirmSlot drains pendingConfirmations)
+  // Build the queue once — but only after AppProvider has finished its async
+  // load (ready === true). Without this guard, the effect fires on mount while
+  // data is still defaultAppData, freezing the queue as empty forever.
   useEffect(() => {
+    if (!ready) return;
     if (initialized.current) return;
     initialized.current = true;
     setQueue(buildQueue(pendingConfirmations));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   // Fire onDone when queue empties
   useEffect(() => {

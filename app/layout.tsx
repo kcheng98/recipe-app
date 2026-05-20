@@ -1,22 +1,12 @@
 import type { Metadata } from "next";
 import { AppProvider } from "@/context/AppProvider";
-import { CookConfirmIntercept } from "@/components/planner/CookConfirmIntercept";
+import { ClientShell } from "@/components/ClientShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Our Recipes",
   description: "A private recipe organizer for our kitchen",
 };
-
-function ClientShell({ children }: { children: React.ReactNode }) {
-  "use client";
-  return (
-    <>
-      <CookConfirmIntercept />
-      {children}
-    </>
-  );
-}
 
 export default function RootLayout({
   children,
