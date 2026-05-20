@@ -20,15 +20,26 @@ const VIBE_LABELS: Record<string, string> = {
   "heavy-rich": "🍲 Heavy & Rich",
 };
 
-function daysSince(isoTimestamp: string): number {
-  return (Date.now() - new Date(isoTimestamp).getTime()) / (1000 * 60 * 60 * 24);
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function lastCookedLabel(recipe: Recipe): string | null {
-  if (recipe.lastCookedAt === null) return null; // never been in planner
-  const days = Math.floor(daysSince(recipe.lastCookedAt));
-  if (days === 0) return "Last cooked: today";
-  if (days === 1) return "Last cooked: yesterday";
+  if (!recipe.lastCookedAt) return null;
+  // Compare date strings directly to avoid timezone issues
+  const cookedDate = recipe.lastCookedAt.slice(0, 10); // "2026-05-19"
+  const today = todayISO();
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  if (cookedDate === today) return "Last cooked: today";
+  if (cookedDate === yesterday) return "Last cooked: yesterday";
+  // For older dates, compute difference in calendar days
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const days = Math.round((new Date(today).getTime() - new Date(cookedDate).getTime()) / msPerDay);
   return `Last cooked: ${days} days ago`;
 }
 
