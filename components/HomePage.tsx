@@ -21,9 +21,12 @@ export default function HomePage() {
     if (folder) setActiveFolder(folder);
   }, []);
   const [activeLabelId, setActiveLabelId] = useState("all");
+  const [activeVibe, setActiveVibe] = useState("all");
+  const [activeMarket, setActiveMarket] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [foldersModalOpen, setFoldersModalOpen] = useState(false);
   const [labelsModalOpen, setLabelsModalOpen] = useState(false);
+  const [activeProtein, setActiveProtein] = useState("all");
 
   const labelFilterOptions = useMemo(
     () => ["all", ...labels.map((l) => l.id)],
@@ -40,26 +43,32 @@ export default function HomePage() {
 
   const filteredRecipes = useMemo(() => {
     const query = search.trim().toLowerCase();
-
+  
     return recipes.filter((recipe) => {
       const matchesFolder =
         activeFolder === ALL_FOLDER_ID || recipe.folderId === activeFolder;
-
+  
       const matchesLabel =
         activeLabelId === "all" || recipe.labelIds.includes(activeLabelId);
-
-      const recipeLabelNames = labels
-        .filter((l) => recipe.labelIds.includes(l.id))
-        .map((l) => l.name);
-
-        const matchesSearch =
+  
+      const matchesVibe =
+        activeVibe === "all" || recipe.vibe === activeVibe;
+  
+      const matchesMarket =
+        activeMarket === "all" ||
+        (recipe.supportedStores ?? ["Standard"]).includes(activeMarket);
+      
+      const matchesProtein =
+        activeProtein === "all" || recipe.proteinType === activeProtein;
+  
+      const matchesSearch =
         query === "" ||
         recipe.title.toLowerCase().includes(query) ||
         recipe.description.toLowerCase().includes(query);
-
-      return matchesFolder && matchesLabel && matchesSearch;
+  
+      return matchesFolder && matchesLabel && matchesVibe && matchesMarket && matchesProtein && matchesSearch;
     });
-  }, [search, activeFolder, activeLabelId, recipes, labels]);
+  }, [search, activeFolder, activeLabelId, activeVibe, activeMarket, activeProtein, recipes, labels]);
 
   const activeFolderLabel =
     activeFolder === ALL_FOLDER_ID
@@ -97,71 +106,101 @@ export default function HomePage() {
 
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-3 lg:hidden">
-            <button
-              type="button"
-              aria-label="Open folders"
-              onClick={() => setSidebarOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1d1d1f] shadow-sm ring-1 ring-[#e5e5ea]"
-            >
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                aria-hidden
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">
-                Our Recipes
-              </p>
-              <p className="text-sm font-semibold text-[#1d1d1f]">
-                {activeFolderLabel}
-              </p>
-            </div>
-            <Link
-              href="/recipes/new"
-              className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white"
-            >
-              Add
-            </Link>
-          </div>
+      <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
+  {/* Mobile: folder button + title + add */}
+  <div className="flex items-center justify-between gap-3 lg:hidden">
+    <button
+      type="button"
+      aria-label="Open folders"
+      onClick={() => setSidebarOpen(true)}
+      className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1d1d1f] shadow-sm ring-1 ring-[#e5e5ea]"
+    >
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">Our Recipes</p>
+      <p className="text-sm font-semibold text-[#1d1d1f]">{activeFolderLabel}</p>
+    </div>
+    <Link href="/recipes/new" className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white">
+      Add
+    </Link>
+  </div>
 
-          <div className="mt-4 max-w-xl lg:mt-0">
-            <SearchBar value={search} onChange={setSearch} />
-          </div>
+  {/* Row 1: Search + Moods + Markets */}
+  <div className="mt-4 flex gap-2 lg:mt-0">
+    <div className="flex-1">
+      <SearchBar value={search} onChange={setSearch} />
+    </div>
+    <select
+      value={activeVibe}
+      onChange={(e) => setActiveVibe(e.target.value)}
+      className="rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
+      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+    >
+      <option value="all">All Moods</option>
+      <option value="light-fresh">🌿 Light &amp; Fresh</option>
+      <option value="all-weather">☁️ All-Weather</option>
+      <option value="heavy-rich">🍲 Heavy &amp; Rich</option>
+    </select>
+    <select
+      value={activeMarket}
+      onChange={(e) => setActiveMarket(e.target.value)}
+      className="rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
+      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+    >
+      <option value="all">All Markets</option>
+      <option value="Standard">🛒 Standard</option>
+      <option value="Asian">🏮 Asian Market</option>
+      <option value="Premium">✨ Premium</option>
+    </select>
+  </div>
 
-          {labels.length > 0 && (
-            <div className="mt-4">
-              <TagFilter
-                categories={labelFilterOptions.map(
-                  (id) => labelFilterLabels[id as keyof typeof labelFilterLabels] ?? id,
-                )}
-                activeCategory={
-                  activeLabelId === "all"
-                    ? "All labels"
-                    : (labels.find((l) => l.id === activeLabelId)?.name ?? "")
-                }
-                onSelect={(name) => {
-                  if (name === "All labels") setActiveLabelId("all");
-                  else {
-                    const label = labels.find((l) => l.name === name);
-                    if (label) setActiveLabelId(label.id);
-                  }
-                }}
-              />
-            </div>
-          )}
-        </header>
+  {/* Row 2: Protein pills */}
+  <div className="mt-3 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+      {(["all", "poultry", "red-meat", "fish-seafood", "vegetarian"] as const).map((val) => {
+        const label = val === "all" ? "All Protein" : val === "poultry" ? "Poultry" : val === "red-meat" ? "Red Meat" : val === "fish-seafood" ? "Fish & Seafood" : "Veg / Vegan";
+        const active = activeProtein === val;
+        return (
+          <button
+            key={val}
+            type="button"
+            onClick={() => setActiveProtein(val)}
+            className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition
+              ${active ? "bg-[#1d1d1f] text-white" : "bg-white text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:ring-[#c7c7cc]"}`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+
+  {/* Row 3: Label pills */}
+  {labels.length > 0 && (
+    <div className="mt-3">
+      <TagFilter
+        categories={labelFilterOptions.map(
+          (id) => labelFilterLabels[id as keyof typeof labelFilterLabels] ?? id,
+        )}
+        activeCategory={
+          activeLabelId === "all"
+            ? "All labels"
+            : (labels.find((l) => l.id === activeLabelId)?.name ?? "")
+        }
+        onSelect={(name) => {
+          if (name === "All labels") setActiveLabelId("all");
+          else {
+            const label = labels.find((l) => l.name === name);
+            if (label) setActiveLabelId(label.id);
+          }
+        }}
+      />
+    </div>
+  )}
+</header>
 
         <section className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-2">
