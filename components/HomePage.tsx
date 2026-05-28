@@ -131,7 +131,7 @@ export default function HomePage() {
 
   {/* Row 1: Search + Moods + Markets */}
   <div className="mt-4 flex flex-wrap gap-2 lg:mt-0 lg:flex-nowrap">
-    <div className="flex-1">
+    <div className="w-full lg:flex-1">
       <SearchBar value={search} onChange={setSearch} />
     </div>
     <select
