@@ -64,46 +64,39 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
             </div>
           )}
         </div>
-        <div className="p-3">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <h3 className="text-[17px] font-semibold leading-snug text-[#1d1d1f]">
-              {recipe.title}
-            </h3>
-            {recipe.totalTime ? (
-              <span className="shrink-0 text-xs text-[#86868b]">
-                ⏱ {recipe.totalTime}
-              </span>
-            ) : null}
-          </div>
-
-          {/* Last cooked line — only shown if recipe has planner history */}
-          {cookedLabel && (
-            <p className="text-xs text-[#86868b] mb-2">{cookedLabel}</p>
-          )}
-
-          {(recipe.proteinType || recipe.vibe || recipeLabels.length > 0) && (
-            <div className="flex flex-wrap gap-1.5">
-              {recipe.proteinType && PROTEIN_LABELS[recipe.proteinType] && (
-                <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-600 ring-1 ring-orange-500/10">
-                  {PROTEIN_LABELS[recipe.proteinType]}
-                </span>
-              )}
-              {recipe.vibe && VIBE_LABELS[recipe.vibe] && (
-                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 ring-1 ring-blue-500/10">
-                  {VIBE_LABELS[recipe.vibe]}
-                </span>
-              )}
-              {recipeLabels.map((label) => (
-                <span
-                  key={label.id}
-                  className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#515154]"
-                >
-                  {label.name}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="p-3 flex flex-col gap-1">
+  <h3 className="text-[15px] font-semibold leading-snug text-[#1d1d1f] line-clamp-2">
+    {recipe.title}
+  </h3>
+  {recipe.totalTime && (
+    <span className="text-xs text-[#86868b]">⏱ {recipe.totalTime}</span>
+  )}
+  {cookedLabel && (
+    <p className="text-xs text-[#86868b]">{cookedLabel}</p>
+  )}
+  {(recipe.proteinType || recipe.vibe || recipeLabels.length > 0) && (
+    <div className="flex flex-wrap gap-1.5 mt-1">
+      {recipe.proteinType && PROTEIN_LABELS[recipe.proteinType] && (
+        <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-600 ring-1 ring-orange-500/10">
+          {PROTEIN_LABELS[recipe.proteinType]}
+        </span>
+      )}
+      {recipe.vibe && VIBE_LABELS[recipe.vibe] && (
+        <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 ring-1 ring-blue-500/10">
+          {VIBE_LABELS[recipe.vibe]}
+        </span>
+      )}
+      {recipeLabels.map((label) => (
+        <span
+          key={label.id}
+          className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#515154]"
+        >
+          {label.name}
+        </span>
+      ))}
+    </div>
+  )}
+</div>
       </article>
     </Link>
   );
