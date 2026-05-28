@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import RecipeImage from "@/components/RecipeImage";
 import { useApp } from "@/context/AppProvider";
@@ -18,7 +19,7 @@ function splitLines(text: string): string[] {
 export default function CookModePage() {
   const params = useParams();
   const id = params.id as string;
-  const { ready, recipes, labels } = useApp();
+  const { ready, recipes, labels, updateRecipeById } = useApp();
   const recipe = recipes.find((r) => r.id === id);
 
   useWakeLock(true);
@@ -48,6 +49,35 @@ export default function CookModePage() {
   const recipeLabels = labels.filter((l) => recipe.labelIds.includes(l.id));
   const ingredients = splitLines(recipe.ingredients);
   const steps = splitLines(recipe.instructions);
+
+  // ── Last cooked inline editing ─────────────────────────────────────────────
+  const [editingLastCooked, setEditingLastCooked] = useState(false);
+
+  const handleLastCookedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value; // "YYYY-MM-DD" or "" if cleared
+    const newLastCookedAt = val
+      ? new Date(val + "T12:00:00").toISOString()
+      : null;
+    // updateRecipeById expects a full RecipeDraft — spread the recipe minus
+    // id/createdAt/updatedAt (those are re-applied inside updateRecipe)
+    const { id: _id, createdAt: _c, updatedAt: _u, ...draft } = recipe;
+    updateRecipeById(recipe.id, { ...draft, lastCookedAt: newLastCookedAt });
+    setEditingLastCooked(false);
+  };
+
+  // Format lastCookedAt ISO → "May 19, 2026" for display
+  const lastCookedDisplay = recipe.lastCookedAt
+    ? new Date(recipe.lastCookedAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
+  // Format lastCookedAt ISO → "YYYY-MM-DD" for the date input value
+  const lastCookedInputValue = recipe.lastCookedAt
+    ? recipe.lastCookedAt.slice(0, 10)
+    : "";
 
   return (
     <div className="min-h-screen bg-white pb-24 text-[#1d1d1f]">
@@ -87,6 +117,41 @@ export default function CookModePage() {
           {recipe.yields ? (
             <span><span className="font-medium uppercase tracking-wide text-xs text-[#515154]">Yield:</span> {recipe.yields}</span>
           ) : null}
+
+          {/* Last cooked — click to edit inline */}
+          <span className="flex items-center gap-1.5">
+            <span className="font-medium uppercase tracking-wide text-xs text-[#515154]">
+              Last cooked:
+            </span>
+            {editingLastCooked ? (
+              <input
+                type="date"
+                defaultValue={lastCookedInputValue}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={handleLastCookedChange}
+                onBlur={() => setEditingLastCooked(false)}
+                autoFocus
+                className="rounded-lg border border-[#0071e3] px-2 py-0.5 text-sm text-[#1d1d1f]
+                           focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
+              />
+            ) : (
+              <button
+                onClick={() => setEditingLastCooked(true)}
+                className="group flex items-center gap-1 text-sm text-[#86868b]
+                           hover:text-[#0071e3] transition-colors"
+                title="Click to set last cooked date"
+              >
+                {lastCookedDisplay ?? <em className="not-italic text-[#86868b]">Never</em>}
+                <svg
+                  className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M16.862 4.487a2.1 2.1 0 1 1 2.97 2.97L7.5 19.79l-4 1 1-4 12.362-12.303z" />
+                </svg>
+              </button>
+            )}
+          </span>
         </div>
 
         {/* System Pillars & Custom Labels prioritized block */}
