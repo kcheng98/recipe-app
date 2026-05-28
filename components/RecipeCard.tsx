@@ -50,7 +50,7 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
   return (
     <Link href={`/recipes/${recipe.id}`} className="block">
       <article className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#e5e5ea] transition hover:shadow-md">
-        <div className="relative aspect-[4/3] overflow-hidden bg-[#f5f5f7]">
+      <div className="relative aspect-[3/2] overflow-hidden bg-[#f5f5f7]">
           {recipe.imageUrl ? (
             <RecipeImage
               src={recipe.imageUrl}
@@ -64,7 +64,7 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
             </div>
           )}
         </div>
-        <div className="p-4">
+        <div className="p-3">
           <div className="mb-1 flex items-center justify-between gap-2">
             <h3 className="text-[17px] font-semibold leading-snug text-[#1d1d1f]">
               {recipe.title}
