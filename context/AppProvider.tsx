@@ -98,6 +98,7 @@ type AppContextValue = {
    * Used by CookConfirmIntercept when the user cooked something unplanned.
    */
   insertHistorySlot: (date: string, recipeId: string) => void;
+  reorderSlots: (orderedDates: string[]) => void;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -544,6 +545,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
+  const reorderSlots = useCallback(
+    (orderedDates: string[]) => {
+      persistAndSync((prev) => {
+        if (!prev.mealPlan) return prev;
+        const today = todayISO();
+        const pastSlots = prev.mealPlan.slots.filter((s) => s.date < today);
+        const upcomingSlots = prev.mealPlan.slots.filter((s) => s.date >= today);
+        const lockedByDate = new Map(
+          upcomingSlots.filter((s) => s.isLocked).map((s) => [s.date, s]),
+        );
+        const unlockedSlots = upcomingSlots.filter((s) => !s.isLocked);
+        const unlockedDatesNewOrder = orderedDates.filter((d) => !lockedByDate.has(d));
+        const recipeIdPool = [...unlockedSlots]
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .map((s) => s.recipeId ?? null);
+        const newRecipeByDate = new Map<string, string | null>();
+        unlockedDatesNewOrder.forEach((date, i) => {
+          newRecipeByDate.set(date, recipeIdPool[i] ?? null);
+        });
+        const reorderedUpcoming = upcomingSlots.map((slot) =>
+          slot.isLocked ? slot : { ...slot, recipeId: newRecipeByDate.get(slot.date) ?? null },
+        );
+        return {
+          ...prev,
+          mealPlan: {
+            ...prev.mealPlan,
+            slots: [...pastSlots, ...reorderedUpcoming].sort((a, b) => a.date.localeCompare(b.date)),
+          },
+        };
+      });
+    },
+    [persistAndSync],
+  );
+
   const skipSlot = useCallback(
     (date: string) => {
       persistAndSync((prev) => {
@@ -664,6 +699,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skipSlot,
       assignSlot,
       insertHistorySlot,
+      reorderSlots,
     }),
     [
       ready,
@@ -690,6 +726,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skipSlot,
       assignSlot,
       insertHistorySlot,
+      reorderSlots,
     ],
   );
 
