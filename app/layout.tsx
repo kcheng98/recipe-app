@@ -4,7 +4,7 @@ import { ClientShell } from "@/components/ClientShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Homemade",
+  title: "Our Recipes",
   description: "A private recipe organizer for our kitchen",
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen antialiased">
+      <body className="min-h-screen antialiased overflow-x-hidden">
         <AppProvider>
           <ClientShell>{children}</ClientShell>
         </AppProvider>
