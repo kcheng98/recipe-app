@@ -140,6 +140,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // without needing to be recreated every time user changes.
   const userRef = useRef<User | null>(null);
   userRef.current = user;
+  const unsubscribeRealtimeRef = useRef<(() => void) | undefined>(undefined);
 
   // ─── Cloud + local save, called directly on every mutation ───────────────
   const persistAndSync = useCallback(
@@ -176,44 +177,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    let unsubscribeRealtime: (() => void) | undefined;
     let initialLoadDone = false;
 
-    async function loadForUser(currentUser: User | null) {
-      if (!currentUser) {
-        setData(loadAppData());
-        setSyncStatus("local");
-        setReady(true);
-        return;
-      }
 
-      setSyncStatus("syncing");
-      try {
-        const cloud = await fetchCloudData(currentUser.id);
+async function loadForUser(currentUser: User | null) {
+  if (!currentUser) {
+    unsubscribeRealtimeRef.current?.();
+    unsubscribeRealtimeRef.current = undefined;
+    setData(loadAppData());
+    setSyncStatus("local");
+    setReady(true);
+    return;
+  }
 
-        if (cloud) {
-          setData(cloud);
-          saveAppData(cloud);
-        } else {
-          const local = loadAppData();
-          const seed = local.recipes.length > 0 ? local : defaultAppData;
-          setData(seed);
-          await saveCloudData(currentUser.id, seed);
-        }
+  setSyncStatus("syncing");
+  try {
+    const cloud = await fetchCloudData(currentUser.id);
 
-        unsubscribeRealtime = subscribeToCloudData(currentUser.id, (fresh) => {
-          setData(fresh);
-          saveAppData(fresh);
-        });
-
-        setSyncStatus("synced");
-      } catch {
-        setData(loadAppData());
-        setSyncStatus("offline");
-      } finally {
-        setReady(true);
-      }
+    if (cloud) {
+      setData(cloud);
+      saveAppData(cloud);
+    } else {
+      const local = loadAppData();
+      const seed = local.recipes.length > 0 ? local : defaultAppData;
+      setData(seed);
+      await saveCloudData(currentUser.id, seed);
     }
+
+    unsubscribeRealtimeRef.current?.();
+    unsubscribeRealtimeRef.current = subscribeToCloudData(currentUser.id, (fresh) => {
+      setData(fresh);
+      saveAppData(fresh);
+    });
+
+    setSyncStatus("synced");
+  } catch {
+    setData(loadAppData());
+    setSyncStatus("offline");
+  } finally {
+    setReady(true);
+  }
+}
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -223,28 +227,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadForUser(currentUser);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!initialLoadDone) return;
+const {
+  data: { subscription },
+} = supabase.auth.onAuthStateChange((event, session) => {
+  if (!initialLoadDone) return;
+  if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
 
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      userRef.current = currentUser;
+  const currentUser = session?.user ?? null;
+  setUser(currentUser);
+  userRef.current = currentUser;
 
-      if (!currentUser) {
-        unsubscribeRealtime?.();
-        setSyncStatus("local");
-      } else {
-        unsubscribeRealtime?.();
-        loadForUser(currentUser);
-      }
-    });
+  if (!currentUser) {
+    unsubscribeRealtimeRef.current?.();
+    unsubscribeRealtimeRef.current = undefined;
+    setSyncStatus("local");
+  } else {
+    loadForUser(currentUser);
+  }
+});
 
-    return () => {
-      subscription.unsubscribe();
-      unsubscribeRealtime?.();
-    };
+return () => {
+  subscription.unsubscribe();
+  unsubscribeRealtimeRef.current?.();
+};
   }, []);
 
   // ─── Keep localStorage in sync with in-memory state (read path only) ─────
