@@ -130,14 +130,14 @@ export default function HomePage() {
   </div>
 
   {/* Row 1: Search + Moods + Markets */}
-  <div className="mt-4 flex gap-2 lg:mt-0">
+  <div className="mt-4 flex flex-wrap gap-2 lg:mt-0 lg:flex-nowrap">
     <div className="flex-1">
       <SearchBar value={search} onChange={setSearch} />
     </div>
     <select
       value={activeVibe}
       onChange={(e) => setActiveVibe(e.target.value)}
-      className="rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
+      className="w-[calc(50%-4px)] lg:w-auto rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
       style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
     >
       <option value="all">All Moods</option>
