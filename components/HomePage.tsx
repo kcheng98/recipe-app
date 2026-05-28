@@ -85,7 +85,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar
         folders={folders}
         activeFolder={activeFolder}
@@ -106,7 +106,7 @@ export default function HomePage() {
       />
 
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
   {/* Mobile: folder button + title + add */}
   <div className="flex items-center justify-between gap-3 lg:hidden">

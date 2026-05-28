@@ -4,8 +4,14 @@ import { ClientShell } from "@/components/ClientShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Our Recipes",
+  title: "Homemade",
   description: "A private recipe organizer for our kitchen",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
