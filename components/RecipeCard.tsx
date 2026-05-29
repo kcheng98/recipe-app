@@ -48,8 +48,8 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
   const cookedLabel = lastCookedLabel(recipe);
 
   return (
-    <Link href={`/recipes/${recipe.id}`} className="block">
-      <article className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#e5e5ea] transition hover:shadow-md">
+    <Link href={`/recipes/${recipe.id}`} className="block h-full">
+      <article className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#e5e5ea] transition hover:shadow-md h-full flex flex-col">
       <div className="relative aspect-[3/2] overflow-hidden bg-[#f5f5f7]">
           {recipe.imageUrl ? (
             <RecipeImage
@@ -64,7 +64,7 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
             </div>
           )}
         </div>
-        <div className="p-3 flex flex-col gap-1">
+        <div className="p-3 flex flex-col gap-1 flex-1">
   <h3 className="text-[15px] font-semibold leading-snug text-[#1d1d1f] line-clamp-2">
     {recipe.title}
   </h3>
@@ -75,7 +75,7 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
     <p className="text-xs text-[#86868b]">{cookedLabel}</p>
   )}
   {(recipe.proteinType || recipe.vibe || recipeLabels.length > 0) && (
-    <div className="flex flex-wrap gap-1.5 mt-1">
+    <div className="flex flex-wrap gap-1.5 mt-auto pt-2">
       {recipe.proteinType && PROTEIN_LABELS[recipe.proteinType] && (
         <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-600 ring-1 ring-orange-500/10">
           {PROTEIN_LABELS[recipe.proteinType]}
