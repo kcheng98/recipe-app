@@ -418,9 +418,10 @@ return () => {
 
         // Collect which slots are locked in the *current* plan for this week
         const lockedSlots: Record<string, string | null> = {};
+        const today = todayISO();
         if (prev.mealPlan?.weekStart === weekStart) {
           for (const slot of prev.mealPlan.slots) {
-            if (slot.isLocked) lockedSlots[slot.date] = slot.recipeId;
+            if (slot.isLocked && slot.date >= today) lockedSlots[slot.date] = slot.recipeId;
           }
         }
 
@@ -433,7 +434,6 @@ return () => {
 
         // Preserve any past slots from the existing plan (history should
         // never be wiped by a regeneration or rolling window advance)
-        const today = todayISO();
         const pastSlots = prev.mealPlan?.slots.filter((s) => s.date < today) ?? [];
         const mergedSlots = [
           ...pastSlots,

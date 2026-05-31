@@ -167,7 +167,6 @@ export function scoreRecipe(
 }
 
 // ─── Stage 3: Bucket allocation ───────────────────────────────────────────────
-
 function allocateBuckets(
   candidates: Recipe[],
   config: PlannerConfig,
