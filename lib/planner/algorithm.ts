@@ -32,8 +32,8 @@ import { getSeasonalVibe } from "./weather";
 
 // ─── Scoring constants ────────────────────────────────────────────────────────
 
-const RECENCY_BONUS = 20;       // cooked > 30 days ago (or never)
-const RECENCY_PENALTY = -100;   // cooked < 7 days ago
+const RECENCY_BONUS = 40;       // never cooked gets extra boost
+const RECENCY_PENALTY = -40;    // recently cooked softly deprioritised
 const STORE_PENALTY = -100;     // required store not enabled (safety net)
 const ASIAN_BATCH_BONUS = 30;   // second+ Asian-store recipe in the same plan
 
@@ -80,7 +80,7 @@ function generateDates(weekStart: string, count: number): string[] {
  * Weighted random pick (without replacement) from an array of [item, weight]
  * pairs. Returns up to `n` items.
  */
-function weightedSample<T>(
+export function weightedSample<T>(
   items: { item: T; weight: number }[],
   n: number,
 ): T[] {
@@ -130,7 +130,7 @@ function hardFilter(recipes: Recipe[], config: PlannerConfig): Recipe[] {
 
 // ─── Stage 2: Scoring ─────────────────────────────────────────────────────────
 
-function scoreRecipe(
+export function scoreRecipe(
   recipe: Recipe,
   config: PlannerConfig,
   /** IDs of recipes already selected so far (for Asian batch bonus) */
@@ -140,12 +140,12 @@ function scoreRecipe(
 
   // Recency
   if (recipe.lastCookedAt === null) {
-    score += RECENCY_BONUS; // never cooked — boost it
+    score += RECENCY_BONUS; // never cooked — strongest boost
   } else {
     const days = daysSince(recipe.lastCookedAt);
-    if (days > RECENCY_BONUS_DAYS) score += RECENCY_BONUS;
-    else if (days < RECENCY_PENALTY_DAYS) score += RECENCY_PENALTY;
-    // between 14–30 days: neutral
+    if (days > RECENCY_BONUS_DAYS) score += RECENCY_BONUS / 2; // cooked > 30 days: mild boost
+    else if (days < RECENCY_PENALTY_DAYS) score += RECENCY_PENALTY; // cooked < 7 days: soft downweight
+    // between 7–30 days: neutral
   }
 
   // Store penalty safety net
@@ -240,9 +240,7 @@ function allocateBuckets(
       // +200 offset ensures weights stay positive even after penalties
       .sort((a, b) => b.weight - a.weight);
 
-    // Take top-3, then weighted-random sample
-    const top3 = scored.slice(0, 3);
-    const chosen = weightedSample(top3, target);
+    const chosen = weightedSample(scored, target);
 
     for (const r of chosen) {
       usedIds.add(r.id);
@@ -261,7 +259,14 @@ function allocateBuckets(
 
   let pickIdx = 0;
   for (const date of openDates) {
-    assignments.set(date, shuffledPicks[pickIdx] ?? null);
+    if (pickIdx < shuffledPicks.length) {
+      assignments.set(date, shuffledPicks[pickIdx]);
+    } else {
+      // Fallback: bucket targets couldn't fill all open slots — pick any unused candidate
+      const fallback = pool.find((r) => !usedIds.has(r.id)) ?? pool[0] ?? null;
+      if (fallback) usedIds.add(fallback.id);
+      assignments.set(date, fallback);
+    }
     pickIdx++;
   }
 

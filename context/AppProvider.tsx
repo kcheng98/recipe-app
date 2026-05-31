@@ -28,7 +28,7 @@ import type {
   RecipeDraft,
 } from "@/lib/types";
 import { createRecipe, updateRecipe } from "@/lib/recipeUtils";
-import { generatePlan } from "@/lib/planner/algorithm";
+import { generatePlan, scoreRecipe, weightedSample } from "@/lib/planner/algorithm";
 import type { User } from "@supabase/supabase-js";
 
 type SyncStatus = "local" | "syncing" | "synced" | "offline";
@@ -141,6 +141,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const userRef = useRef<User | null>(null);
   userRef.current = user;
   const unsubscribeRealtimeRef = useRef<(() => void) | undefined>(undefined);
+  const isSavingRef = useRef<boolean>(false);
 
   // ─── Cloud + local save, called directly on every mutation ───────────────
   const persistAndSync = useCallback(
@@ -155,9 +156,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const currentUser = userRef.current;
         if (currentUser && cloudEnabled) {
           setSyncStatus("syncing");
+          isSavingRef.current = true;
           saveCloudData(currentUser.id, next)
             .then(() => setSyncStatus("synced"))
-            .catch(() => setSyncStatus("offline"));
+            .catch(() => setSyncStatus("offline"))
+            .finally(() => { isSavingRef.current = false; });
         }
 
         return next;
@@ -205,10 +208,6 @@ async function loadForUser(currentUser: User | null) {
     }
 
     unsubscribeRealtimeRef.current?.();
-    unsubscribeRealtimeRef.current = subscribeToCloudData(currentUser.id, (fresh) => {
-      setData(fresh);
-      saveAppData(fresh);
-    });
 
     setSyncStatus("synced");
   } catch {
@@ -271,10 +270,24 @@ return () => {
 
   const updateRecipeById = useCallback(
     (id: string, draft: RecipeDraft) => {
-      persistAndSync((prev) => ({
-        ...prev,
-        recipes: prev.recipes.map((r) => (r.id === id ? updateRecipe(r, draft) : r)),
-      }));
+      persistAndSync((prev) => {
+        const updatedRecipes = prev.recipes.map((r) => (r.id === id ? updateRecipe(r, draft) : r));
+        const updatedRecipe = updatedRecipes.find((r) => r.id === id);
+
+        // If lastCookedAt was set, backfill the matching slot's status to "cooked"
+        const updatedMealPlan = prev.mealPlan && updatedRecipe?.lastCookedAt
+          ? {
+              ...prev.mealPlan,
+              slots: prev.mealPlan.slots.map((s) =>
+                s.recipeId === id && s.date <= todayISO() && s.status === "pending"
+                  ? { ...s, status: "cooked" as const }
+                  : s,
+              ),
+            }
+          : prev.mealPlan;
+
+        return { ...prev, recipes: updatedRecipes, mealPlan: updatedMealPlan };
+      });
     },
     [persistAndSync],
   );
@@ -457,35 +470,36 @@ return () => {
         if (!prev.mealPlan || !prev.plannerConfig) return prev;
 
         const slot = prev.mealPlan.slots.find((s) => s.date === date);
-        if (!slot || slot.isLocked) return prev;
+        if (!slot || slot.isLocked || !slot.recipeId) return prev;
 
-        // Re-run the algorithm with the current recipe excluded from this slot
-        const lockedSlots: Record<string, string | null> = {};
-        for (const s of prev.mealPlan.slots) {
-          if (s.isLocked || s.date !== date) {
-            lockedSlots[s.date] = s.recipeId;
-          }
-        }
-        // Mark the current recipe as excluded for this slot by passing it as a
-        // locked placeholder for a dummy date — instead, re-generate with a
-        // blacklist of one recipe.
-        const excluded = slot.recipeId ? new Set([slot.recipeId]) : new Set<string>();
-        const freshPlan = generatePlan(
-          prev.mealPlan.weekStart,
-          prev.plannerConfig,
-          prev.recipes,
-          lockedSlots,
-          excluded,
+        const currentRecipe = prev.recipes.find((r) => r.id === slot.recipeId);
+        if (!currentRecipe) return prev;
+
+        const usedIds = new Set(
+          prev.mealPlan.slots.map((s) => s.recipeId).filter(Boolean) as string[],
         );
 
-        // Merge: preserve non-swapped slots, take the new assignment for `date`
-        const newSlot = freshPlan.slots.find((s) => s.date === date);
+        // Candidates: same protein type, not already in the plan, passes hard filters
+        const candidates = prev.recipes.filter((r) =>
+          r.id !== slot.recipeId &&
+          !usedIds.has(r.id) &&
+          r.proteinType === currentRecipe.proteinType,
+        );
+
+        // Score and weighted-pick best candidate
+        const scored = candidates
+          .map((r) => ({ item: r, weight: scoreRecipe(r, prev.plannerConfig!, []) + 200 }))
+          .sort((a, b) => b.weight - a.weight);
+
+        const chosen = weightedSample(scored, 1);
+        if (!chosen.length) return prev; // no candidate — leave slot unchanged
+
         return {
           ...prev,
           mealPlan: {
             ...prev.mealPlan,
             slots: prev.mealPlan.slots.map((s) =>
-              s.date === date && newSlot ? { ...newSlot } : s,
+              s.date === date ? { ...s, recipeId: chosen[0].id } : s,
             ),
           },
         };
@@ -569,9 +583,12 @@ return () => {
         unlockedDatesNewOrder.forEach((date, i) => {
           newRecipeByDate.set(date, recipeIdPool[i] ?? null);
         });
-        const reorderedUpcoming = upcomingSlots.map((slot) =>
-          slot.isLocked ? slot : { ...slot, recipeId: newRecipeByDate.get(slot.date) ?? null },
-        );
+        const reorderedUpcoming = upcomingSlots.map((slot) => {
+          if (slot.isLocked) return slot;
+          const newRecipeId = newRecipeByDate.get(slot.date) ?? null;
+          const newStatus = newRecipeId && slot.status === "untracked" ? "pending" as const : slot.status;
+          return { ...slot, recipeId: newRecipeId, status: newStatus };
+        });
         return {
           ...prev,
           mealPlan: {

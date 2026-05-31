@@ -454,7 +454,7 @@ export function MealPlannerView() {
                   Adjust
                 </button>
                 <button
-                  onClick={() => generateMealPlan(weekStart)}
+                  onClick={() => generateMealPlan(todayISO())}
                   className="flex items-center gap-1.5 bg-orange-500 text-white text-xs font-bold
                              px-3 py-2 rounded-xl shadow-sm hover:bg-orange-600 active:scale-95 transition-all"
                 >

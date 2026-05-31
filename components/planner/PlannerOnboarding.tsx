@@ -82,7 +82,7 @@ interface Props {
 }
 
 export function PlannerOnboarding({ open, onClose }: Props) {
-  const { setPlannerConfig, generateMealPlan } = useApp();
+  const { setPlannerConfig, generateMealPlan, plannerConfig } = useApp();
 
   const [daysPerWeek, setDaysPerWeek] = useState(5);
   const [daysInput, setDaysInput] = useState("5");
@@ -99,15 +99,16 @@ export function PlannerOnboarding({ open, onClose }: Props) {
     setDaysInput(String(daysPerWeek));
   }, [daysPerWeek]);
 
-  // Reset defaults whenever modal opens
+  // Reset to current saved config whenever modal opens
   useEffect(() => {
     if (open) {
-      setDaysPerWeek(5);
-      setDaysInput("5");
-      setTargets({ poultry: 2, "fish-seafood": 1, "red-meat": 1, vegetarianVegan: 1 });
-      setEnabledStores(["Standard"]);
+      const days = plannerConfig?.daysPerWeek ?? 5;
+      setDaysPerWeek(days);
+      setDaysInput(String(days));
+      setTargets(plannerConfig?.proteinTargets ?? { poultry: 2, "fish-seafood": 1, "red-meat": 1, vegetarianVegan: 1 });
+      setEnabledStores(plannerConfig?.enabledStores ?? ["Standard"]);
     }
-  }, [open]);
+  }, [open, plannerConfig]);
 
   const handleDaysBlur = () => {
     const n = Math.min(7, Math.max(0, parseInt(daysInput) || 0));
@@ -134,7 +135,7 @@ export function PlannerOnboarding({ open, onClose }: Props) {
     if (!canSubmit) return;
     const config: PlannerConfig = { daysPerWeek, proteinTargets: targets, enabledStores };
     setPlannerConfig(config);
-    generateMealPlan(todayISO());
+    setTimeout(() => generateMealPlan(todayISO()), 0);
     onClose();
   };
 
