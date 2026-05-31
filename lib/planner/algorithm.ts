@@ -262,8 +262,15 @@ function allocateBuckets(
     if (pickIdx < shuffledPicks.length) {
       assignments.set(date, shuffledPicks[pickIdx]);
     } else {
-      // Fallback: bucket targets couldn't fill all open slots — pick any unused candidate
-      const fallback = pool.find((r) => !usedIds.has(r.id)) ?? pool[0] ?? null;
+      // NEW RANDOMIZED FALLBACK CODE
+      // Fallback: Filter down to ONLY the recipes we haven't used yet this week
+      const unusedPool = pool.filter((r) => !usedIds.has(r.id));
+      
+      // Pick a random index from that unused pool, or default to null if completely empty
+      const fallback = unusedPool.length > 0 
+        ? unusedPool[Math.floor(Math.random() * unusedPool.length)] 
+        : null;
+
       if (fallback) usedIds.add(fallback.id);
       assignments.set(date, fallback);
     }
