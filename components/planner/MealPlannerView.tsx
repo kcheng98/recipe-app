@@ -337,7 +337,8 @@ export function MealPlannerView() {
   // ── Feature 1: collapse state for history ──────────────────────────────────
   const today = todayISO();
   const slots = mealPlan?.slots ?? [];
-  const historySlots = slots.filter((s) => s.date < today);
+  const cutoff = addDays(today, -14);
+  const historySlots = slots.filter((s) => s.date < today && s.date >= cutoff);
   const upcomingSlots = slots.filter((s) => s.date >= today);
 
   // The whole Recent section starts collapsed (one click shows all rows)
