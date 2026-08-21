@@ -5,22 +5,15 @@
  *
  * Stage 1 — Hard filters
  *   • Remove recipes whose vibe conflicts with current season (weather.ts)
- *   • Remove recipes that require a store tier the user hasn't enabled
  *
  * Stage 2 — Scoring  (applied to each candidate independently)
  *   • Base score:            0
  *   • Recency bonus:        +20  if lastCookedAt is > 30 days ago OR never
  *   • Recency penalty:     -100  if lastCookedAt is < 14 days ago
- *   • Store exclusion:     -100  if ANY required store tier is NOT enabled
- *     (belt-and-suspenders; hard filter above already removes these, but this
- *      prevents accidents if the filter is bypassed)
- *   • Asian batching bonus: +30  if recipe requires "Asian" store AND at least
- *     one other already-selected recipe also requires "Asian" store
- *     (rewards batching the Asian grocery run into a single trip)
  *
  * Stage 3 — Bucket allocation
  *   • Group candidates by protein bucket:
- *       poultry | fish-seafood | red-meat | vegetarianVegan (vegetarian + vegan)
+ *       poultry | fish-seafood | red-meat | pork | vegetarianVegan (vegetarian + vegan)
  *   • For each bucket, fill up to the target count from PlannerConfig.
  *   • Within a bucket, pick from the weighted top-3 (scores → weights, then
  *     weighted random without replacement).
@@ -34,20 +27,19 @@ import { getSeasonalVibe } from "./weather";
 
 const RECENCY_BONUS = 40;       // never cooked gets extra boost
 const RECENCY_PENALTY = -40;    // recently cooked softly deprioritised
-const STORE_PENALTY = -100;     // required store not enabled (safety net)
-const ASIAN_BATCH_BONUS = 30;   // second+ Asian-store recipe in the same plan
 
 const RECENCY_BONUS_DAYS = 30;
 const RECENCY_PENALTY_DAYS = 7;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ProteinBucket = "poultry" | "fish-seafood" | "red-meat" | "vegetarianVegan";
+type ProteinBucket = "poultry" | "fish-seafood" | "red-meat" | "pork" | "vegetarianVegan";
 
 function toBucket(pt: ProteinType): ProteinBucket | null {
   if (pt === "poultry") return "poultry";
   if (pt === "fish-seafood") return "fish-seafood";
   if (pt === "red-meat") return "red-meat";
+  if (pt === "pork") return "pork";
   if (pt === "vegetarian" || pt === "vegan") return "vegetarianVegan";
   return null; // "none" — excluded from bucket allocation
 }
@@ -110,7 +102,7 @@ export function weightedSample<T>(
 
 // ─── Stage 1: Hard filters ────────────────────────────────────────────────────
 
-function hardFilter(recipes: Recipe[], config: PlannerConfig): Recipe[] {
+function hardFilter(recipes: Recipe[]): Recipe[] {
   const seasonalVibe = getSeasonalVibe();
 
   return recipes.filter((r) => {
@@ -118,24 +110,13 @@ function hardFilter(recipes: Recipe[], config: PlannerConfig): Recipe[] {
     // "all-weather" passes always; mismatched vibe fails.
     if (r.vibe !== "all-weather" && r.vibe !== seasonalVibe) return false;
 
-    // Store filter: every required store tier must be enabled
-    const hasRequiredStore = r.supportedStores.every((tier) =>
-      config.enabledStores.includes(tier),
-    );
-    if (!hasRequiredStore) return false;
-
     return true;
   });
 }
 
 // ─── Stage 2: Scoring ─────────────────────────────────────────────────────────
 
-export function scoreRecipe(
-  recipe: Recipe,
-  config: PlannerConfig,
-  /** IDs of recipes already selected so far (for Asian batch bonus) */
-  selectedRecipes: Recipe[],
-): number {
+export function scoreRecipe(recipe: Recipe): number {
   let score = 0;
 
   // Recency
@@ -146,21 +127,6 @@ export function scoreRecipe(
     if (days > RECENCY_BONUS_DAYS) score += RECENCY_BONUS / 2; // cooked > 30 days: mild boost
     else if (days < RECENCY_PENALTY_DAYS) score += RECENCY_PENALTY; // cooked < 7 days: soft downweight
     // between 7–30 days: neutral
-  }
-
-  // Store penalty safety net
-  const hasAllStores = recipe.supportedStores.every((tier) =>
-    config.enabledStores.includes(tier),
-  );
-  if (!hasAllStores) score += STORE_PENALTY;
-
-  // Asian batching bonus: applies when this recipe needs Asian market AND
-  // at least one already-selected recipe also needs Asian market.
-  if (recipe.supportedStores.includes("Asian")) {
-    const alreadyHasAsian = selectedRecipes.some((r) =>
-      r.supportedStores.includes("Asian"),
-    );
-    if (alreadyHasAsian) score += ASIAN_BATCH_BONUS;
   }
 
   return score;
@@ -184,12 +150,16 @@ function allocateBuckets(
     assignments.set(date, r);
   }
 
-  // Count how many of each bucket are already satisfied by locked slots
+  // Count how many of each bucket are already satisfied by locked slots.
+  // `?? 0` guards against a stale saved config missing a key that was added
+  // later (e.g. `pork`) — should already be backfilled by normalizePlannerConfig
+  // at load time, but this keeps the algorithm itself safe regardless.
   const remaining: Record<ProteinBucket, number> = {
-    poultry: config.proteinTargets.poultry,
-    "fish-seafood": config.proteinTargets["fish-seafood"],
-    "red-meat": config.proteinTargets["red-meat"],
-    vegetarianVegan: config.proteinTargets.vegetarianVegan,
+    poultry: config.proteinTargets.poultry ?? 0,
+    "fish-seafood": config.proteinTargets["fish-seafood"] ?? 0,
+    "red-meat": config.proteinTargets["red-meat"] ?? 0,
+    pork: config.proteinTargets.pork ?? 0,
+    vegetarianVegan: config.proteinTargets.vegetarianVegan ?? 0,
   };
 
   for (const r of lockedRecipes) {
@@ -208,19 +178,18 @@ function allocateBuckets(
     poultry: pool.filter((r) => toBucket(r.proteinType) === "poultry"),
     "fish-seafood": pool.filter((r) => toBucket(r.proteinType) === "fish-seafood"),
     "red-meat": pool.filter((r) => toBucket(r.proteinType) === "red-meat"),
+    pork: pool.filter((r) => toBucket(r.proteinType) === "pork"),
     vegetarianVegan: pool.filter(
       (r) => r.proteinType === "vegetarian" || r.proteinType === "vegan",
     ),
   };
-
-  // Already-selected recipes (for Asian batch bonus in scoring)
-  const selected: Recipe[] = [...lockedRecipes];
 
   // For each bucket in order, score and pick
   const bucketOrder: ProteinBucket[] = [
     "poultry",
     "fish-seafood",
     "red-meat",
+    "pork",
     "vegetarianVegan",
   ];
 
@@ -233,9 +202,9 @@ function allocateBuckets(
 
     const bucketCandidates = bucketPools[bucket].filter((r) => !usedIds.has(r.id));
 
-    // Score each candidate in the context of already-selected recipes
+    // Score each candidate
     const scored = bucketCandidates
-      .map((r) => ({ item: r, weight: scoreRecipe(r, config, selected) + 200 }))
+      .map((r) => ({ item: r, weight: scoreRecipe(r) + 200 }))
       // +200 offset ensures weights stay positive even after penalties
       .sort((a, b) => b.weight - a.weight);
 
@@ -243,7 +212,6 @@ function allocateBuckets(
 
     for (const r of chosen) {
       usedIds.add(r.id);
-      selected.push(r);
       picks.push(r);
     }
   }
@@ -301,7 +269,7 @@ export function generatePlan(
   const dates = generateDates(weekStart, config.daysPerWeek);
 
   // Stage 1
-  const candidates = hardFilter(allRecipes, config);
+  const candidates = hardFilter(allRecipes);
 
   // Resolve locked recipes (need the full Recipe objects for scoring context)
   const lockedRecipes: Recipe[] = [];

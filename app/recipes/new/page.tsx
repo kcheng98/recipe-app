@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import ImportMethods from "@/components/ImportMethods";
@@ -40,12 +39,15 @@ export default function NewRecipePage() {
       <header className="border-b border-[#e5e5ea] bg-white/90 px-4 py-4 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
         <div>
-            <Link
-              href="/"
-              className="text-sm text-[#0071e3] hover:underline"
+            {/* router.back() (not a fixed href) so the home page's
+                filters/scroll position are restored as left. */}
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="cursor-pointer text-sm text-[#0071e3] hover:underline"
             >
               ← Back to recipes
-            </Link>
+            </button>
             <h1 className="mt-1 text-2xl font-semibold text-[#1d1d1f]">
               Add recipe
             </h1>
@@ -61,7 +63,7 @@ export default function NewRecipePage() {
               </button>
               <button
                 type="button"
-                onClick={() => router.push("/")}
+                onClick={() => router.back()}
                 className="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:bg-[#f5f5f7]"
               >
                 Cancel
@@ -87,7 +89,7 @@ export default function NewRecipePage() {
               onChange={setDraft}
               submitLabel="Save recipe"
               onSubmit={handleSave}
-              onCancel={() => router.push("/")}
+              onCancel={() => router.back()}
             />
           )
         )}

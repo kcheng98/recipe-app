@@ -3,13 +3,12 @@
 /**
  * components/recipe/PillarFieldEditors.tsx
  *
- * Drop-in section for the recipe edit/detail form that exposes the 4 planner
+ * Drop-in section for the recipe edit/detail form that exposes the planner
  * pillar fields:
  *
  *   Pillar A — Protein Type     (single-select button group)
  *   Pillar B — Last Cooked At   (read-only display; stamped automatically by confirmSlot)
  *   Pillar C — Vibe             (single-select button group)
- *   Pillar D — Supported Stores (multi-select checkboxes)
  *
  * Per the spec, these fields are NEVER shown on recipe cards in the grid —
  * they are system/planner metadata, only visible inside the edit form.
@@ -22,17 +21,14 @@
  *     onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))}
  *   />
  *
- * Where `draft` is a RecipeDraft (or any object containing the 4 pillar fields).
+ * Where `draft` is a RecipeDraft (or any object containing the pillar fields).
  */
 
-import type { MoodVibe, ProteinType, RecipeDraft, StoreTier } from "@/lib/types";
+import type { MoodVibe, ProteinType, RecipeDraft } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type PillarPatch = Pick<
-  RecipeDraft,
-  "proteinType" | "lastCookedAt" | "vibe" | "supportedStores"
->;
+type PillarPatch = Pick<RecipeDraft, "proteinType" | "lastCookedAt" | "vibe">;
 
 interface Props {
   draft: PillarPatch;
@@ -45,6 +41,7 @@ const PROTEIN_OPTIONS: { value: ProteinType; label: string; emoji: string }[] = 
   { value: "poultry", label: "Poultry", emoji: "🍗" },
   { value: "fish-seafood", label: "Fish / Seafood", emoji: "🐟" },
   { value: "red-meat", label: "Red Meat", emoji: "🥩" },
+  { value: "pork", label: "Pork", emoji: "🥓" },
   { value: "vegetarian", label: "Veg / Vegan", emoji: "🥦" },
 ];
 
@@ -67,12 +64,6 @@ const VIBE_OPTIONS: { value: MoodVibe; label: string; emoji: string; desc: strin
     emoji: "🍲",
     desc: "Winter braises, stews",
   },
-];
-
-const STORE_OPTIONS: { value: StoreTier; label: string; emoji: string; desc: string }[] = [
-  { value: "Standard", label: "Standard", emoji: "🛒", desc: "Trader Joe's, QFC, Amazon" },
-  { value: "Asian", label: "Asian Market", emoji: "🏮", desc: "Asian Family Mart, H Mart" },
-  { value: "Premium", label: "Premium", emoji: "✨", desc: "Whole Foods, PCC" },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -189,77 +180,11 @@ export function PillarFieldEditors({ draft, onChange }: Props) {
     </div>
   );
 
-  // ── Pillar D: Supported Stores ─────────────────────────────────────────────
-  const toggleStore = (tier: StoreTier) => {
-    const current = draft.supportedStores ?? ["Standard"];
-    if (tier === "Standard") return; // Standard is always required, non-removable
-    const next = current.includes(tier)
-      ? current.filter((s) => s !== tier)
-      : [...current, tier];
-    // Always ensure Standard is present
-    if (!next.includes("Standard")) next.push("Standard");
-    onChange({ supportedStores: next });
-  };
-
-  const renderSupportedStores = () => (
-    <div className="mb-2">
-      <SectionLabel>Required stores</SectionLabel>
-      <p className="text-xs text-gray-400 mb-2">
-        Which stores do you need to source this recipe? "Standard" is always required.
-      </p>
-      <div className="flex flex-col gap-2">
-        {STORE_OPTIONS.map(({ value, label, emoji, desc }) => {
-          const checked = (draft.supportedStores ?? ["Standard"]).includes(value);
-          const locked = value === "Standard";
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => toggleStore(value)}
-              disabled={locked}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border text-left transition
-                ${
-                  checked
-                    ? "border-orange-400 bg-orange-50"
-                    : "border-gray-200 bg-gray-50 hover:border-orange-200"
-                }
-                ${locked ? "cursor-default" : "cursor-pointer"}`}
-            >
-              <span className="text-xl">{emoji}</span>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-700">{label}</p>
-                <p className="text-xs text-gray-400">{desc}</p>
-              </div>
-              <span
-                className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition
-                  ${checked ? "border-orange-500 bg-orange-500" : "border-gray-300"}`}
-              >
-                {checked && (
-                  <svg viewBox="0 0 10 8" className="w-2.5 h-2.5 fill-white">
-                    <path
-                      d="M1 4l3 3 5-6"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <div className="border-t border-gray-100 mt-6 pt-6">
       <p className="text-sm font-bold text-gray-700 mb-4">Meal Planner Settings</p>
       {renderProteinType()}
       {renderVibe()}
-      {renderSupportedStores()}
       {renderLastCooked()}
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import ManageFoldersModal from "@/components/ManageFoldersModal";
 import ManageLabelsModal from "@/components/ManageLabelsModal";
 import RecipeCard from "@/components/RecipeCard";
@@ -10,24 +10,90 @@ import Sidebar from "@/components/Sidebar";
 import TagFilter from "@/components/TagFilter";
 import { useApp } from "@/context/AppProvider";
 import { ALL_FOLDER_ID } from "@/lib/defaults";
-import type { StoreTier } from "@/lib/types";
+import { sortRecipesForDisplay } from "@/lib/recipeUtils";
+
+/**
+ * Next.js's App Router does not preserve a page component's local React
+ * state across navigation — even navigating "back" tears down and rebuilds
+ * this component from scratch, so filters/search reset to their defaults
+ * every time you return here. To make "come back to where I was" actually
+ * work, the filter selections and scroll position are mirrored into
+ * sessionStorage (scoped to this browser tab) and restored on mount.
+ */
+type HomeViewState = {
+  search?: string;
+  activeFolder?: string;
+  activeLabelId?: string;
+  activeVibe?: string;
+  activeProtein?: string;
+  scrollTop?: number;
+};
+
+const HOME_VIEW_STATE_KEY = "recipe-app-home-view-v1";
+
+function readHomeViewState(): HomeViewState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(HOME_VIEW_STATE_KEY);
+    return raw ? (JSON.parse(raw) as HomeViewState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeHomeViewState(patch: HomeViewState): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = readHomeViewState() ?? {};
+    sessionStorage.setItem(
+      HOME_VIEW_STATE_KEY,
+      JSON.stringify({ ...current, ...patch }),
+    );
+  } catch {
+    // sessionStorage unavailable (private browsing, quota, etc.) — the view
+    // just won't restore; not worth surfacing an error for.
+  }
+}
 
 export default function HomePage() {
   const { ready, recipes, labels, folders } = useApp();
-  const [search, setSearch] = useState("");
-  const [activeFolder, setActiveFolder] = useState(ALL_FOLDER_ID);
+  const [search, setSearch] = useState(() => readHomeViewState()?.search ?? "");
+  const [activeFolder, setActiveFolder] = useState(
+    () => readHomeViewState()?.activeFolder ?? ALL_FOLDER_ID,
+  );
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const folder = params.get("folder");
     if (folder) setActiveFolder(folder);
   }, []);
-  const [activeLabelId, setActiveLabelId] = useState("all");
-  const [activeVibe, setActiveVibe] = useState("all");
-  const [activeMarket, setActiveMarket] = useState("all");
+  const [activeLabelId, setActiveLabelId] = useState(
+    () => readHomeViewState()?.activeLabelId ?? "all",
+  );
+  const [activeVibe, setActiveVibe] = useState(
+    () => readHomeViewState()?.activeVibe ?? "all",
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [foldersModalOpen, setFoldersModalOpen] = useState(false);
   const [labelsModalOpen, setLabelsModalOpen] = useState(false);
-  const [activeProtein, setActiveProtein] = useState("all");
+  const [activeProtein, setActiveProtein] = useState(
+    () => readHomeViewState()?.activeProtein ?? "all",
+  );
+
+  // Persist filter selections as they change.
+  useEffect(() => {
+    writeHomeViewState({ search, activeFolder, activeLabelId, activeVibe, activeProtein });
+  }, [search, activeFolder, activeLabelId, activeVibe, activeProtein]);
+
+  // Persist + restore scroll position of the recipe list itself (it's the
+  // scrollable region here, not the window).
+  const scrollRef = useRef<HTMLElement>(null);
+  const hasRestoredScroll = useRef(false);
+
+  const handleScroll = useCallback(() => {
+    if (scrollRef.current) {
+      writeHomeViewState({ scrollTop: scrollRef.current.scrollTop });
+    }
+  }, []);
 
   const labelFilterOptions = useMemo(
     () => ["all", ...labels.map((l) => l.id)],
@@ -44,8 +110,8 @@ export default function HomePage() {
 
   const filteredRecipes = useMemo(() => {
     const query = search.trim().toLowerCase();
-  
-    return recipes.filter((recipe) => {
+
+    const filtered = recipes.filter((recipe) => {
       const matchesFolder =
         activeFolder === ALL_FOLDER_ID || recipe.folderId === activeFolder;
   
@@ -54,22 +120,35 @@ export default function HomePage() {
   
       const matchesVibe =
         activeVibe === "all" || recipe.vibe === activeVibe;
-  
-      const matchesMarket =
-        activeMarket === "all" ||
-        (recipe.supportedStores ?? ["Standard"]).includes(activeMarket as StoreTier);
-      
+
       const matchesProtein =
         activeProtein === "all" || recipe.proteinType === activeProtein;
-  
+
+      // Match on the title only — it's the one field you actually see and
+      // edit. (description is an internal field, silently populated from
+      // import scraping or the title itself, and never shown/editable, so
+      // matching against it produced results with no visible connection to
+      // the search term.)
       const matchesSearch =
-        query === "" ||
-        recipe.title.toLowerCase().includes(query) ||
-        recipe.description.toLowerCase().includes(query);
-  
-      return matchesFolder && matchesLabel && matchesVibe && matchesMarket && matchesProtein && matchesSearch;
+        query === "" || recipe.title.toLowerCase().includes(query);
+
+      return matchesFolder && matchesLabel && matchesVibe && matchesProtein && matchesSearch;
     });
-  }, [search, activeFolder, activeLabelId, activeVibe, activeMarket, activeProtein, recipes, labels]);
+
+    return sortRecipesForDisplay(filtered, folders);
+  }, [search, activeFolder, activeLabelId, activeVibe, activeProtein, recipes, labels, folders]);
+
+  // Restore scroll position once, after the (correctly filtered/sorted)
+  // list has actually rendered — restoring any earlier just clips against
+  // a list that isn't tall enough yet.
+  useEffect(() => {
+    if (!ready || hasRestoredScroll.current || !scrollRef.current) return;
+    const saved = readHomeViewState()?.scrollTop;
+    if (typeof saved === "number") {
+      scrollRef.current.scrollTop = saved;
+    }
+    hasRestoredScroll.current = true;
+  }, [ready, filteredRecipes]);
 
   const activeFolderLabel =
     activeFolder === ALL_FOLDER_ID
@@ -106,7 +185,11 @@ export default function HomePage() {
       />
 
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <main
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex min-w-0 flex-1 flex-col overflow-y-auto"
+      >
       <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
   {/* Mobile: folder button + title + add */}
   <div className="flex items-center justify-between gap-3 lg:hidden">
@@ -129,7 +212,7 @@ export default function HomePage() {
     </Link>
   </div>
 
-  {/* Row 1: Search + Moods + Markets */}
+  {/* Row 1: Search + Moods */}
   <div className="mt-4 flex flex-wrap gap-2 lg:mt-0 lg:flex-nowrap">
     <div className="w-full lg:flex-1">
       <SearchBar value={search} onChange={setSearch} />
@@ -145,24 +228,13 @@ export default function HomePage() {
       <option value="all-weather">☁️ All-Weather</option>
       <option value="heavy-rich">🍲 Heavy &amp; Rich</option>
     </select>
-    <select
-      value={activeMarket}
-      onChange={(e) => setActiveMarket(e.target.value)}
-      className="rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
-      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
-    >
-      <option value="all">All Markets</option>
-      <option value="Standard">🛒 Standard</option>
-      <option value="Asian">🏮 Asian Market</option>
-      <option value="Premium">✨ Premium</option>
-    </select>
   </div>
 
   {/* Row 2: Protein pills */}
   <div className="mt-3 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-      {(["all", "poultry", "red-meat", "fish-seafood", "vegetarian"] as const).map((val) => {
-        const label = val === "all" ? "All Protein" : val === "poultry" ? "Poultry" : val === "red-meat" ? "Red Meat" : val === "fish-seafood" ? "Fish & Seafood" : "Veg / Vegan";
+      {(["all", "poultry", "red-meat", "pork", "fish-seafood", "vegetarian"] as const).map((val) => {
+        const label = val === "all" ? "All Protein" : val === "poultry" ? "Poultry" : val === "red-meat" ? "Red Meat" : val === "pork" ? "Pork" : val === "fish-seafood" ? "Fish & Seafood" : "Veg / Vegan";
         const active = activeProtein === val;
         return (
           <button

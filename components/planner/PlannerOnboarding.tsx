@@ -4,13 +4,14 @@
  * components/planner/PlannerOnboarding.tsx
  *
  * Single-page scrollable config sheet (replaces 3-step wizard).
- * Sections visible simultaneously: days, protein counters, store checkboxes.
+ * Sections visible simultaneously: days, protein counters.
  * Submit button at the bottom generates the plan immediately.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/context/AppProvider";
-import type { PlannerConfig, ProteinTargets, StoreTier } from "@/lib/types";
+import { defaultProteinTargets, normalizeProteinTargets } from "@/lib/defaults";
+import type { PlannerConfig, ProteinTargets } from "@/lib/types";
 
 function todayISO(): string {
   const d = new Date();
@@ -22,6 +23,7 @@ function proteinSum(targets: ProteinTargets): number {
     targets.poultry +
     targets["fish-seafood"] +
     targets["red-meat"] +
+    targets.pork +
     targets.vegetarianVegan
   );
 }
@@ -86,27 +88,26 @@ export function PlannerOnboarding({ open, onClose }: Props) {
 
   const [daysPerWeek, setDaysPerWeek] = useState(5);
   const [daysInput, setDaysInput] = useState("5");
-  const [targets, setTargets] = useState<ProteinTargets>({
-    poultry: 2,
-    "fish-seafood": 1,
-    "red-meat": 1,
-    vegetarianVegan: 1,
-  });
-  const [enabledStores, setEnabledStores] = useState<StoreTier[]>(["Standard"]);
+  const [targets, setTargets] = useState<ProteinTargets>(defaultProteinTargets);
 
   // Keep daysInput in sync when daysPerWeek changes programmatically
   useEffect(() => {
     setDaysInput(String(daysPerWeek));
   }, [daysPerWeek]);
 
-  // Reset to current saved config whenever modal opens
+  // Reset to current saved config whenever modal opens. normalizeProteinTargets
+  // backfills any keys missing from an older saved config (e.g. `pork`, added
+  // after some users already had a PlannerConfig) so the sum below never NaNs.
   useEffect(() => {
     if (open) {
       const days = plannerConfig?.daysPerWeek ?? 5;
       setDaysPerWeek(days);
       setDaysInput(String(days));
-      setTargets(plannerConfig?.proteinTargets ?? { poultry: 2, "fish-seafood": 1, "red-meat": 1, vegetarianVegan: 1 });
-      setEnabledStores(plannerConfig?.enabledStores ?? ["Standard"]);
+      setTargets(
+        plannerConfig
+          ? normalizeProteinTargets(plannerConfig.proteinTargets)
+          : defaultProteinTargets,
+      );
     }
   }, [open, plannerConfig]);
 
@@ -120,30 +121,17 @@ export function PlannerOnboarding({ open, onClose }: Props) {
     setTargets((prev) => ({ ...prev, [key]: Math.max(0, prev[key] + delta) }));
   }, []);
 
-  const toggleStore = (tier: StoreTier) => {
-    if (tier === "Standard") return;
-    setEnabledStores((prev) =>
-      prev.includes(tier) ? prev.filter((s) => s !== tier) : [...prev, tier],
-    );
-  };
-
   const sum = proteinSum(targets);
   const remaining = daysPerWeek - sum;
   const canSubmit = remaining === 0 && daysPerWeek > 0;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    const config: PlannerConfig = { daysPerWeek, proteinTargets: targets, enabledStores };
+    const config: PlannerConfig = { daysPerWeek, proteinTargets: targets };
     setPlannerConfig(config);
     setTimeout(() => generateMealPlan(todayISO()), 0);
     onClose();
   };
-
-  const storeTiers: { tier: StoreTier; label: string; emoji: string; desc: string }[] = [
-    { tier: "Standard", label: "Standard", emoji: "🛒", desc: "Trader Joe's, QFC, Amazon — always on" },
-    { tier: "Asian", label: "Asian Market", emoji: "🏮", desc: "Asian Family Mart, H Mart" },
-    { tier: "Premium", label: "Premium", emoji: "✨", desc: "Whole Foods, PCC" },
-  ];
 
   if (!open) return null;
 
@@ -206,47 +194,12 @@ export function PlannerOnboarding({ open, onClose }: Props) {
               <Counter label="Red Meat" emoji="🥩" value={targets["red-meat"]}
                 onIncrement={() => adjust("red-meat", 1)} onDecrement={() => adjust("red-meat", -1)}
                 canIncrement={sum < daysPerWeek} canDecrement={targets["red-meat"] > 0} />
+              <Counter label="Pork" emoji="🥓" value={targets.pork}
+                onIncrement={() => adjust("pork", 1)} onDecrement={() => adjust("pork", -1)}
+                canIncrement={sum < daysPerWeek} canDecrement={targets.pork > 0} />
               <Counter label="Vegetarian / Vegan" emoji="🥦" value={targets.vegetarianVegan}
                 onIncrement={() => adjust("vegetarianVegan", 1)} onDecrement={() => adjust("vegetarianVegan", -1)}
                 canIncrement={sum < daysPerWeek} canDecrement={targets.vegetarianVegan > 0} />
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 mb-6" />
-
-          {/* ── Section 3: Store tiers ── */}
-          <div className="mb-4">
-            <h2 className="text-base font-bold text-gray-900 mb-0.5">Where are you shopping?</h2>
-            <p className="text-xs text-gray-400 mb-3">Only recipes you can source will be recommended.</p>
-            <div className="flex flex-col gap-2">
-              {storeTiers.map(({ tier, label, emoji, desc }) => {
-                const checked = enabledStores.includes(tier);
-                const locked = tier === "Standard";
-                return (
-                  <button
-                    key={tier}
-                    onClick={() => toggleStore(tier)}
-                    disabled={locked}
-                    className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition border
-                      ${checked ? "border-orange-400 bg-orange-50" : "border-gray-200 bg-gray-50 hover:border-orange-200"}
-                      ${locked ? "cursor-default" : "cursor-pointer"}`}
-                  >
-                    <span className="text-2xl">{emoji}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-800">{label}</p>
-                      <p className="text-xs text-gray-400">{desc}</p>
-                    </div>
-                    <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition
-                      ${checked ? "border-orange-500 bg-orange-500" : "border-gray-300"}`}>
-                      {checked && (
-                        <svg viewBox="0 0 10 8" className="w-3 h-3 fill-white">
-                          <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
           </div>
         </div>

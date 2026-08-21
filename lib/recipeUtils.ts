@@ -1,4 +1,4 @@
-import type { ImportedRecipe, Recipe, RecipeDraft } from "./types";
+import type { Folder, ImportedRecipe, Recipe, RecipeDraft } from "./types";
 import { createId } from "./storage";
 
 export function emptyDraft(folderId: string): RecipeDraft {
@@ -22,7 +22,6 @@ export function emptyDraft(folderId: string): RecipeDraft {
     proteinType: "none",
     lastCookedAt: null,
     vibe: "all-weather",
-    supportedStores: ["Standard"],
   };
 }
 
@@ -65,6 +64,36 @@ export function updateRecipe(recipe: Recipe, draft: RecipeDraft): Recipe {
     ...draft,
     updatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Orders recipes for display: grouped by folder (in the folder list's own
+ * current order, so reordering folders reorders recipe groups too), then
+ * within each folder group by most-recently-cooked first — never-cooked
+ * recipes sort last within their group.
+ *
+ * `folders` should already be in display order (the `folders` value from
+ * useApp() already is).
+ */
+export function sortRecipesForDisplay(
+  recipes: Recipe[],
+  folders: Folder[],
+): Recipe[] {
+  const folderOrder = new Map(folders.map((f, index) => [f.id, index]));
+  const orderOf = (folderId: string) =>
+    folderOrder.get(folderId) ?? Number.MAX_SAFE_INTEGER;
+
+  return [...recipes].sort((a, b) => {
+    const folderDiff = orderOf(a.folderId) - orderOf(b.folderId);
+    if (folderDiff !== 0) return folderDiff;
+
+    if (a.lastCookedAt === null && b.lastCookedAt === null) return 0;
+    if (a.lastCookedAt === null) return 1; // never-cooked sorts last
+    if (b.lastCookedAt === null) return -1;
+    return (
+      new Date(b.lastCookedAt).getTime() - new Date(a.lastCookedAt).getTime()
+    );
+  });
 }
 
 export async function readFileAsDataUrl(file: File): Promise<string> {

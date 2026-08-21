@@ -31,7 +31,9 @@ export default function ImageCropModal({
       const dataUrl = await getCroppedImageDataUrl(imageSrc, croppedArea);
       onComplete(dataUrl);
     } catch {
-      alert("Could not crop this image. Try uploading a different file.");
+      alert(
+        "Could not crop this image — it may be corrupted or in a format this browser can't decode. Try a different photo.",
+      );
     } finally {
       setSaving(false);
     }

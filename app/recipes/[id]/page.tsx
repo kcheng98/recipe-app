@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import RecipeImage from "@/components/RecipeImage";
 import { useApp } from "@/context/AppProvider";
 import { cleanRecipeLine } from "@/lib/cleanRecipeText";
@@ -18,6 +18,7 @@ function splitLines(text: string): string[] {
 
 export default function CookModePage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const { ready, recipes, labels, updateRecipeById } = useApp();
   const recipe = recipes.find((r) => r.id === id);
@@ -82,15 +83,16 @@ export default function CookModePage() {
   return (
     <div className="min-h-screen bg-white pb-24 text-[#1d1d1f]">
       <header className="sticky top-0 z-20 border-b border-[#e5e5ea] bg-white/95 px-4 py-3 backdrop-blur-md">
-        {fromPlanner ? (
-          <Link href="/planner" className="text-sm text-[#0071e3]">
-            ← Meal Plan
-          </Link>
-        ) : (
-          <Link href="/" className="text-sm text-[#0071e3]">
-            ← Recipes
-          </Link>
-        )}
+        {/* Goes back through browser history (not a fixed href) so the home
+            page's filters/scroll position — or the planner — are restored
+            exactly as left, the same as the browser's own back button. */}
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="cursor-pointer text-sm text-[#0071e3] hover:underline"
+        >
+          {fromPlanner ? "← Meal Plan" : "← Recipes"}
+        </button>
       </header>
 
       {recipe.imageUrl ? (
@@ -163,6 +165,7 @@ export default function CookModePage() {
                 {recipe.proteinType === "poultry" ? "🍗 Poultry" :
                  recipe.proteinType === "fish-seafood" ? "🐟 Fish / Seafood" :
                  recipe.proteinType === "red-meat" ? "🥩 Red Meat" :
+                 recipe.proteinType === "pork" ? "🥓 Pork" :
                  recipe.proteinType === "vegetarian" ? "🌱 Veg / Vegan" :
                  recipe.proteinType === "vegan" ? "🌱 Veg / Vegan" : null}
               </span>

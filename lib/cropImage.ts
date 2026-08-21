@@ -35,7 +35,14 @@ export async function getCroppedImageDataUrl(
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.crossOrigin = "anonymous";
+    // Only needed for cross-origin (http/https) sources — setting it on a
+    // data: URL is harmless but unnecessary. Callers should route remote
+    // URLs through /api/import/image first (see lib/imageProxy.ts) so this
+    // almost always receives a same-origin data: URL and never hits a
+    // CORS-tainted canvas; this stays as a defensive fallback.
+    if (!src.startsWith("data:")) {
+      image.crossOrigin = "anonymous";
+    }
     image.onload = () => resolve(image);
     image.onerror = reject;
     image.src = src;

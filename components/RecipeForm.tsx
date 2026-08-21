@@ -6,6 +6,8 @@ import RecipeImage from "@/components/RecipeImage";
 import { useApp } from "@/context/AppProvider";
 import type { RecipeDraft } from "@/lib/types";
 import { readFileAsDataUrl } from "@/lib/recipeUtils";
+import { normalizeImageFile } from "@/lib/heic";
+import { fetchImageAsDataUrl } from "@/lib/imageProxy";
 import { PillarFieldEditors } from "@/components/PillarFieldEditors";
 
 type RecipeFormProps = {
@@ -32,6 +34,8 @@ export default function RecipeForm({
   const fileRef = useRef<HTMLInputElement>(null);
   const [newLabelName, setNewLabelName] = useState("");
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [coverError, setCoverError] = useState("");
+  const [coverBusy, setCoverBusy] = useState(false);
 
   function update<K extends keyof RecipeDraft>(key: K, value: RecipeDraft[K]) {
     onChange({ ...draft, [key]: value });
@@ -49,8 +53,48 @@ export default function RecipeForm({
 
   async function handleCoverUpload(file: File | null) {
     if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    setCropSrc(dataUrl);
+    setCoverError("");
+    setCoverBusy(true);
+    try {
+      // iPhone Camera Roll photos default to HEIC/HEIF, which browsers can't
+      // decode into an <img>/canvas — convert to JPEG first if needed.
+      const normalized = await normalizeImageFile(file);
+      const dataUrl = await readFileAsDataUrl(normalized);
+      setCropSrc(dataUrl);
+    } catch (err) {
+      setCoverError(
+        err instanceof Error
+          ? err.message
+          : "Could not read that photo. Try a different file.",
+      );
+    } finally {
+      setCoverBusy(false);
+      // Allow re-selecting the same file again after an error
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function openCropForCurrentImage() {
+    if (!draft.imageUrl) return;
+    if (draft.imageUrl.startsWith("data:")) {
+      setCropSrc(draft.imageUrl);
+      return;
+    }
+    // Pasted image URL — fetch it through the server-side proxy first so the
+    // cropper always operates on a same-origin data URL and never hits a
+    // CORS-blocked or canvas-tainting source image.
+    setCoverError("");
+    setCoverBusy(true);
+    try {
+      const dataUrl = await fetchImageAsDataUrl(draft.imageUrl);
+      setCropSrc(dataUrl);
+    } catch (err) {
+      setCoverError(
+        err instanceof Error ? err.message : "Could not load that image for cropping.",
+      );
+    } finally {
+      setCoverBusy(false);
+    }
   }
 
   function handleCreateLabel() {
@@ -162,42 +206,57 @@ export default function RecipeForm({
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
+            disabled={coverBusy}
             onClick={() => fileRef.current?.click()}
-            className="rounded-xl bg-[#f5f5f7] px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#e8e8ed]"
+            className="rounded-xl bg-[#f5f5f7] px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#e8e8ed] disabled:opacity-50"
           >
-            Upload image
+            {coverBusy ? "Working…" : "Upload image"}
           </button>
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
+            disabled={coverBusy}
             className="hidden"
             onChange={(e) => handleCoverUpload(e.target.files?.[0] ?? null)}
           />
           {draft.imageUrl ? (
             <button
               type="button"
-              onClick={() => setCropSrc(draft.imageUrl)}
-              className="rounded-xl bg-[#f5f5f7] px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#e8e8ed]"
+              disabled={coverBusy}
+              onClick={openCropForCurrentImage}
+              className="rounded-xl bg-[#f5f5f7] px-4 py-2 text-sm font-medium text-[#1d1d1f] hover:bg-[#e8e8ed] disabled:opacity-50"
             >
-              Crop &amp; reposition
+              {coverBusy ? "Working…" : "Crop & reposition"}
             </button>
           ) : null}
           <button
             type="button"
-            onClick={() => update("imageUrl", "")}
+            onClick={() => {
+              update("imageUrl", "");
+              setCoverError("");
+            }}
             className="rounded-xl px-4 py-2 text-sm text-[#86868b] hover:bg-[#f5f5f7]"
           >
             Remove
           </button>
         </div>
 
+        {coverError ? (
+          <p className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+            {coverError}
+          </p>
+        ) : null}
+
         <div className="mt-4">
           <label className={labelClass}>Image URL (optional)</label>
           <input
             className={inputClass}
             value={draft.imageUrl.startsWith("data:") ? "" : draft.imageUrl}
-            onChange={(e) => update("imageUrl", e.target.value)}
+            onChange={(e) => {
+              update("imageUrl", e.target.value);
+              setCoverError("");
+            }}
             placeholder="https://..."
           />
         </div>

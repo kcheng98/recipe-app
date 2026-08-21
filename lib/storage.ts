@@ -1,4 +1,4 @@
-import { defaultAppData } from "./defaults";
+import { defaultAppData, normalizePlannerConfig } from "./defaults";
 import type { AppData } from "./types";
 
 const STORAGE_KEY = "recipe-app-data-v1";
@@ -17,6 +17,7 @@ export function loadAppData(): AppData {
       order: typeof folder.order === "number" ? folder.order : index,
     }));
     parsed.folders.sort((a, b) => a.order - b.order);
+    parsed.plannerConfig = normalizePlannerConfig(parsed.plannerConfig);
     return parsed;
   } catch {
     return defaultAppData;

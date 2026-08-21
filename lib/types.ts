@@ -30,8 +30,6 @@ export type Recipe = {
   lastCookedAt: string | null;
   // Pillar C: seasonal mood/weight of the dish
   vibe: MoodVibe;
-  // Pillar D: which store tiers are required to source this recipe
-  supportedStores: StoreTier[];
 };
 
 export type Label = {
@@ -68,15 +66,13 @@ export type ProteinType =
   | "poultry"
   | "fish-seafood"
   | "red-meat"
+  | "pork"
   | "vegetarian"
   | "vegan"
   | "none";
 
 /** Pillar C — seasonal/mood weight of a dish, used for weather filtering */
 export type MoodVibe = "light-fresh" | "heavy-rich" | "all-weather";
-
-/** Pillar D — which retail channels are needed to source a recipe */
-export type StoreTier = "Standard" | "Asian" | "Premium";
 
 /**
  * The user's saved planner preferences.
@@ -89,12 +85,9 @@ export type PlannerConfig = {
   /**
    * Target protein counts for the week.
    * The values must sum to daysPerWeek.
-   * e.g. { poultry: 2, "fish-seafood": 1, "red-meat": 1, vegetarianVegan: 0 }
+   * e.g. { poultry: 2, "fish-seafood": 1, "red-meat": 1, pork: 0, vegetarianVegan: 0 }
    */
   proteinTargets: ProteinTargets;
-
-  /** Which store tiers the user is shopping at this week */
-  enabledStores: StoreTier[];
 };
 
 /**
@@ -106,6 +99,7 @@ export type ProteinTargets = {
   poultry: number;
   "fish-seafood": number;
   "red-meat": number;
+  pork: number;
   vegetarianVegan: number;
 };
 

@@ -1,4 +1,4 @@
-import { defaultAppData } from "@/lib/defaults";
+import { defaultAppData, normalizePlannerConfig } from "@/lib/defaults";
 import type { AppData } from "@/lib/types";
 import { getSupabase } from "./client";
 
@@ -82,7 +82,6 @@ function normalizeAppData(raw: AppData): AppData {
       proteinType: recipe.proteinType ?? "none",
       lastCookedAt: recipe.lastCookedAt ?? null,
       vibe: recipe.vibe ?? "all-weather",
-      supportedStores: recipe.supportedStores ?? ["Standard"],
     })),
     labels: raw.labels ?? [],
     folders: (raw.folders ?? defaultAppData.folders).map((folder, index) => ({
@@ -90,7 +89,7 @@ function normalizeAppData(raw: AppData): AppData {
       order: typeof folder.order === "number" ? folder.order : index,
     })),
     // ── Planner fields ──
-    plannerConfig: raw.plannerConfig ?? null,
+    plannerConfig: normalizePlannerConfig(raw.plannerConfig),
     mealPlan: raw.mealPlan ?? null,
   };
 }

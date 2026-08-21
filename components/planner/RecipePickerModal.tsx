@@ -21,6 +21,7 @@ const PROTEIN_EMOJI: Record<string, string> = {
   poultry: "🍗",
   "fish-seafood": "🐟",
   "red-meat": "🥩",
+  pork: "🥓",
   vegetarian: "🌱",
   vegan: "🌱",
   none: "🍽️",

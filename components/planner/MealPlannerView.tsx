@@ -552,8 +552,7 @@ export function MealPlannerView() {
             {/* ── Config footer ── */}
             <div className="mt-6 p-3 rounded-2xl bg-gray-50 border border-gray-100">
               <p className="text-xs text-gray-400 font-medium">
-                {plannerConfig.daysPerWeek} dinners/week ·{" "}
-                {plannerConfig.enabledStores.join(", ")} stores
+                {plannerConfig.daysPerWeek} dinners/week
               </p>
               <p className="text-xs text-gray-300 mt-1">
                 💡 Drag ⠿ to reorder upcoming meals. Locked slots stay fixed.

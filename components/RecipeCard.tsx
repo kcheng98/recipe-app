@@ -11,6 +11,7 @@ const PROTEIN_LABELS: Record<string, string> = {
   poultry: "🍗 Poultry",
   "fish-seafood": "🐟 Fish / Seafood",
   "red-meat": "🥩 Red Meat",
+  pork: "🥓 Pork",
   vegetarian: "🌱 Veg / Vegan",
 };
 

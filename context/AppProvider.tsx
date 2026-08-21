@@ -488,7 +488,7 @@ return () => {
 
         // Score and weighted-pick best candidate
         const scored = candidates
-          .map((r) => ({ item: r, weight: scoreRecipe(r, prev.plannerConfig!, []) + 200 }))
+          .map((r) => ({ item: r, weight: scoreRecipe(r) + 200 }))
           .sort((a, b) => b.weight - a.weight);
 
         const chosen = weightedSample(scored, 1);

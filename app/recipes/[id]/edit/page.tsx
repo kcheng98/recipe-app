@@ -51,9 +51,15 @@ export default function EditRecipePage() {
       <header className="border-b border-[#e5e5ea] bg-white/90 px-4 py-4 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
           <div>
-            <Link href="/" className="text-sm text-[#0071e3] hover:underline">
+            {/* router.back() (not a fixed href) so the home page's
+                filters/scroll position are restored as left. */}
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="cursor-pointer text-sm text-[#0071e3] hover:underline"
+            >
               ← Back to recipes
-            </Link>
+            </button>
             <h1 className="mt-1 text-2xl font-semibold text-[#1d1d1f]">
               Edit recipe
             </h1>

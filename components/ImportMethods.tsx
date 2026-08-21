@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ImportedRecipe, RecipeDraft } from "@/lib/types";
 import { draftFromImport } from "@/lib/recipeUtils";
+import { normalizeImageFile } from "@/lib/heic";
 
 type ImportMethod = "manual" | "url" | "photo" | "pdf";
 
@@ -72,11 +73,16 @@ export default function ImportMethods({
     setLoading(true);
     setOcrProgress("Starting OCR…");
     try {
+      // iPhone Camera Roll photos default to HEIC/HEIF, which the OCR
+      // engine (and the browser preview below) can't decode — convert to
+      // JPEG first if needed.
+      const normalizedFile = await normalizeImageFile(file);
+
       const { createWorker } = await import("tesseract.js");
       const worker = await createWorker("eng");
       const {
         data: { text },
-      } = await worker.recognize(file);
+      } = await worker.recognize(normalizedFile);
       await worker.terminate();
 
       const lines = text
@@ -94,13 +100,17 @@ export default function ImportMethods({
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result as string);
             reader.onerror = reject;
-            reader.readAsDataURL(file);
+            reader.readAsDataURL(normalizedFile);
           }),
         },
         "photo",
       );
-    } catch {
-      setError("Could not read photo. Try a clearer image or manual entry.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not read photo. Try a clearer image or manual entry.",
+      );
     } finally {
       setLoading(false);
       setOcrProgress("");
@@ -194,7 +204,7 @@ export default function ImportMethods({
             </label>
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               disabled={loading}
               onChange={(e) => importFromPhoto(e.target.files?.[0] ?? null)}
               className="block w-full text-sm text-[#515154]"
