@@ -151,7 +151,9 @@ export default function Sidebar({
                   ? "☁️ Syncing…"
                   : syncStatus === "offline"
                     ? "☁️ Offline — tap to retry"
-                    : "☁️ Account & Settings"
+                    : syncStatus === "conflict"
+                      ? "☁️ Updated elsewhere — reloaded latest"
+                      : "☁️ Account & Settings"
                 : syncStatus === "local"
                   ? "☁️ Syncing…"
                   : "☁️ Sign in to sync recipes"}

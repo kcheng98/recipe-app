@@ -16,6 +16,7 @@ export const defaultAppData: AppData = {
   folders: defaultFolders,
   plannerConfig: null,  // null triggers onboarding intercept
   mealPlan: null,
+  cookLog: [],
 };
 
 export const defaultProteinTargets: ProteinTargets = {

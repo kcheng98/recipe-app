@@ -1,4 +1,4 @@
-import type { Folder, ImportedRecipe, Recipe, RecipeDraft } from "./types";
+import type { CookEvent, Folder, ImportedRecipe, Recipe, RecipeDraft } from "./types";
 import { createId } from "./storage";
 
 export function emptyDraft(folderId: string): RecipeDraft {
@@ -94,6 +94,22 @@ export function sortRecipesForDisplay(
       new Date(b.lastCookedAt).getTime() - new Date(a.lastCookedAt).getTime()
     );
   });
+}
+
+/**
+ * Builds one cook-log entry for Kitchen Wrapped. Called anywhere
+ * lastCookedAt gets stamped on a recipe, with the same date. Snapshots the
+ * title + protein type so the log stays meaningful even if the recipe is
+ * later renamed, re-categorized, or deleted.
+ */
+export function createCookEvent(recipe: Recipe, cookedAt: string): CookEvent {
+  return {
+    id: createId(),
+    recipeId: recipe.id,
+    recipeTitle: recipe.title,
+    proteinType: recipe.proteinType,
+    cookedAt,
+  };
 }
 
 export async function readFileAsDataUrl(file: File): Promise<string> {

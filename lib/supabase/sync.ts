@@ -4,39 +4,110 @@ import { getSupabase } from "./client";
 
 const TABLE = "recipe_library";
 
-export async function fetchCloudData(userId: string): Promise<AppData | null> {
+/**
+ * Tri-state fetch result — this is the fix for the incident where an
+ * ambiguous fetch (network hiccup, RLS error, transient Supabase error) was
+ * being treated the same as "no row exists yet," which caused a real
+ * account's data to be silently overwritten with empty defaults.
+ *
+ * - "found": the row exists, here's the data and its current version.
+ * - "not-found": Supabase positively confirmed no row exists for this user
+ *   (maybeSingle() returned no row AND no error). Only this state may ever
+ *   trigger seeding + pushing defaults.
+ * - "error": something went wrong and we don't actually know whether a row
+ *   exists. Callers must NEVER treat this as "safe to seed."
+ */
+export type CloudFetchResult =
+  | { status: "found"; data: AppData; version: number }
+  | { status: "not-found" }
+  | { status: "error"; error: unknown };
+
+export async function fetchCloudData(userId: string): Promise<CloudFetchResult> {
   const supabase = getSupabase();
-  if (!supabase) return null;
+  if (!supabase) {
+    return { status: "error", error: new Error("Supabase not configured") };
+  }
 
   const { data, error } = await supabase
     .from(TABLE)
-    .select("data")
+    .select("data, version")
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error || !data?.data) return null;
-  return normalizeAppData(data.data as AppData);
+  if (error) return { status: "error", error };
+  if (!data) return { status: "not-found" };
+
+  return {
+    status: "found",
+    data: normalizeAppData(data.data as AppData),
+    version: typeof data.version === "number" ? data.version : 1,
+  };
 }
 
+export type CloudSaveResult =
+  | { status: "ok"; version: number }
+  | { status: "conflict" };
+
+/**
+ * Writes appData to the cloud with optimistic concurrency control.
+ *
+ * - expectedVersion === null: this is the FIRST write ever for this
+ *   account (only ever called after fetchCloudData confirmed "not-found").
+ *   Uses a plain insert, which fails loudly on a unique-key violation if a
+ *   row already exists — it can never silently clobber one.
+ * - expectedVersion is a number: this is an update, guarded by
+ *   `where version = expectedVersion`. If another device (or tab) saved in
+ *   between, the row's version has already moved on, zero rows match, and
+ *   this returns {status:"conflict"} instead of overwriting that device's
+ *   write with our stale copy.
+ */
 export async function saveCloudData(
   userId: string,
   appData: AppData,
-): Promise<void> {
+  expectedVersion: number | null,
+): Promise<CloudSaveResult> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return { status: "ok", version: expectedVersion ?? 1 };
 
-  const { error } = await supabase.from(TABLE).upsert({
-    user_id: userId,
-    data: appData,
-    updated_at: new Date().toISOString(),
-  });
+  if (expectedVersion === null) {
+    const { error } = await supabase.from(TABLE).insert({
+      user_id: userId,
+      data: appData,
+      version: 1,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      // 23505 = unique_violation — a row already exists for this user.
+      // Someone/something beat us to it; treat as a conflict, never retry blind.
+      if ((error as { code?: string }).code === "23505") {
+        return { status: "conflict" };
+      }
+      throw error;
+    }
+    return { status: "ok", version: 1 };
+  }
+
+  const nextVersion = expectedVersion + 1;
+  const { data: rows, error } = await supabase
+    .from(TABLE)
+    .update({
+      data: appData,
+      version: nextVersion,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("version", expectedVersion)
+    .select("version");
 
   if (error) throw error;
+  if (!rows || rows.length === 0) return { status: "conflict" };
+  return { status: "ok", version: nextVersion };
 }
 
 export function subscribeToCloudData(
   userId: string,
-  onUpdate: (data: AppData) => void,
+  onUpdate: (data: AppData, version: number) => void,
 ): () => void {
   const supabase = getSupabase();
   if (!supabase) return () => {};
@@ -57,7 +128,7 @@ export function subscribeToCloudData(
         if (row?.user_id && row.user_id !== userId) return;
 
         const fresh = await fetchCloudData(userId);
-        if (fresh) onUpdate(fresh);
+        if (fresh.status === "found") onUpdate(fresh.data, fresh.version);
       },
     )
     .subscribe();
@@ -91,5 +162,7 @@ function normalizeAppData(raw: AppData): AppData {
     // ── Planner fields ──
     plannerConfig: normalizePlannerConfig(raw.plannerConfig),
     mealPlan: raw.mealPlan ?? null,
+    // ── Kitchen Wrapped ── (missing entirely for data saved before this shipped)
+    cookLog: raw.cookLog ?? defaultAppData.cookLog,
   };
 }

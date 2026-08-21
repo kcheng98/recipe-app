@@ -3,6 +3,13 @@
 create table if not exists recipe_library (
   user_id uuid primary key references auth.users (id) on delete cascade,
   data jsonb not null default '{}'::jsonb,
+  -- Optimistic-concurrency counter. Every save checks `version = <what it
+  -- last read>` before writing, and bumps it by 1. If another device saved
+  -- in between, the check matches zero rows and that write is rejected
+  -- instead of silently overwriting the newer data.
+  -- Existing database? Run this once in the SQL Editor:
+  --   alter table recipe_library add column if not exists version integer not null default 1;
+  version integer not null default 1,
   updated_at timestamptz not null default now()
 );
 

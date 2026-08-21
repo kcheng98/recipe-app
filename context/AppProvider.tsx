@@ -19,6 +19,7 @@ import {
 } from "@/lib/supabase/sync";
 import type {
   AppData,
+  CookEvent,
   Folder,
   Label,
   MealPlan,
@@ -27,11 +28,11 @@ import type {
   Recipe,
   RecipeDraft,
 } from "@/lib/types";
-import { createRecipe, updateRecipe } from "@/lib/recipeUtils";
+import { createCookEvent, createRecipe, updateRecipe } from "@/lib/recipeUtils";
 import { generatePlan, scoreRecipe, weightedSample } from "@/lib/planner/algorithm";
 import type { User } from "@supabase/supabase-js";
 
-type SyncStatus = "local" | "syncing" | "synced" | "offline";
+type SyncStatus = "local" | "syncing" | "synced" | "offline" | "conflict";
 
 type AppContextValue = {
   // ── Core state ────────────────────────────────────────────────────────────
@@ -46,6 +47,8 @@ type AppContextValue = {
   // ── Planner state ─────────────────────────────────────────────────────────
   plannerConfig: PlannerConfig | null;
   mealPlan: MealPlan | null;
+  /** Every cook ever logged, oldest first. Powers Kitchen Wrapped. */
+  cookLog: CookEvent[];
   /**
    * Slots from past weeks whose status is still "pending" — the user hasn't
    * confirmed or skipped them yet. The CookConfirmIntercept component drains
@@ -142,6 +145,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   userRef.current = user;
   const unsubscribeRealtimeRef = useRef<(() => void) | undefined>(undefined);
   const isSavingRef = useRef<boolean>(false);
+  // The version of the row we last read from (or wrote to) Supabase. Every
+  // save is guarded against this — if it's stale, the write is rejected
+  // instead of overwriting a newer copy. null = no confirmed row yet
+  // (signed out, still loading, or the last fetch was ambiguous).
+  const cloudVersionRef = useRef<number | null>(null);
 
   // ─── Cloud + local save, called directly on every mutation ───────────────
   const persistAndSync = useCallback(
@@ -157,8 +165,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (currentUser && cloudEnabled) {
           setSyncStatus("syncing");
           isSavingRef.current = true;
-          saveCloudData(currentUser.id, next)
-            .then(() => setSyncStatus("synced"))
+          const expectedVersion = cloudVersionRef.current;
+
+          saveCloudData(currentUser.id, next, expectedVersion)
+            .then(async (result) => {
+              if (result.status === "ok") {
+                cloudVersionRef.current = result.version;
+                setSyncStatus("synced");
+                return;
+              }
+
+              // Conflict: another device/tab saved first. Never retry blind
+              // with our stale copy — pull down whatever's actually there
+              // now, so this device converges on the same truth instead of
+              // fighting over which write wins.
+              const fresh = await fetchCloudData(currentUser.id);
+              if (fresh.status === "found") {
+                cloudVersionRef.current = fresh.version;
+                setData(fresh.data);
+                saveAppData(fresh.data);
+              }
+              setSyncStatus("conflict");
+            })
             .catch(() => setSyncStatus("offline"))
             .finally(() => { isSavingRef.current = false; });
         }
@@ -184,9 +212,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
 async function loadForUser(currentUser: User | null) {
+  unsubscribeRealtimeRef.current?.();
+  unsubscribeRealtimeRef.current = undefined;
+
   if (!currentUser) {
-    unsubscribeRealtimeRef.current?.();
-    unsubscribeRealtimeRef.current = undefined;
+    cloudVersionRef.current = null;
     setData(loadAppData());
     setSyncStatus("local");
     setReady(true);
@@ -194,28 +224,68 @@ async function loadForUser(currentUser: User | null) {
   }
 
   setSyncStatus("syncing");
-  try {
-    const cloud = await fetchCloudData(currentUser.id);
 
-    if (cloud) {
-      setData(cloud);
-      saveAppData(cloud);
-    } else {
-      const local = loadAppData();
-      const seed = local.recipes.length > 0 ? local : defaultAppData;
-      setData(seed);
-      await saveCloudData(currentUser.id, seed);
-    }
+  const result = await fetchCloudData(currentUser.id);
 
-    unsubscribeRealtimeRef.current?.();
-
+  if (result.status === "found") {
+    // The normal case: a real row exists — use it, full stop.
+    setData(result.data);
+    saveAppData(result.data);
+    cloudVersionRef.current = result.version;
     setSyncStatus("synced");
-  } catch {
+  } else if (result.status === "not-found") {
+    // Supabase POSITIVELY confirmed there's no row for this account yet
+    // (not an error, not a timeout — an actual empty result). Only this
+    // branch may ever seed + push defaults to the cloud.
+    const local = loadAppData();
+    const seed = local.recipes.length > 0 ? local : defaultAppData;
+    setData(seed);
+    try {
+      const saveResult = await saveCloudData(currentUser.id, seed, null);
+      if (saveResult.status === "ok") {
+        cloudVersionRef.current = saveResult.version;
+        setSyncStatus("synced");
+      } else {
+        // Someone/something created a row in the moment between our fetch
+        // and our insert (e.g. two devices signing in for the first time
+        // at once). Don't fight over it — just re-fetch and take the truth.
+        const refetch = await fetchCloudData(currentUser.id);
+        if (refetch.status === "found") {
+          setData(refetch.data);
+          saveAppData(refetch.data);
+          cloudVersionRef.current = refetch.version;
+          setSyncStatus("synced");
+        } else {
+          setSyncStatus("offline");
+        }
+      }
+    } catch {
+      setSyncStatus("offline");
+    }
+  } else {
+    // Ambiguous / network / query error — this is the case that used to
+    // get treated as "empty account" and silently overwrite real data.
+    // Never do that: fall back to whatever's cached on this device and
+    // leave the cloud row completely untouched until we can confirm what's
+    // actually in it.
+    cloudVersionRef.current = null;
     setData(loadAppData());
     setSyncStatus("offline");
-  } finally {
-    setReady(true);
   }
+
+  // Live push sync: while this tab/device is open, adopt any newer save
+  // from another device the moment it happens, instead of only catching up
+  // on the next full page load/sign-in. Guarded by version so a stale or
+  // duplicate event can never step backwards over a newer local write.
+  unsubscribeRealtimeRef.current = subscribeToCloudData(currentUser.id, (fresh, version) => {
+    if (cloudVersionRef.current !== null && version <= cloudVersionRef.current) return;
+    cloudVersionRef.current = version;
+    setData(fresh);
+    saveAppData(fresh);
+    setSyncStatus("synced");
+  });
+
+  setReady(true);
 }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -239,6 +309,7 @@ const {
   if (!currentUser) {
     unsubscribeRealtimeRef.current?.();
     unsubscribeRealtimeRef.current = undefined;
+    cloudVersionRef.current = null;
     setSyncStatus("local");
   } else {
     loadForUser(currentUser);
@@ -271,6 +342,7 @@ return () => {
   const updateRecipeById = useCallback(
     (id: string, draft: RecipeDraft) => {
       persistAndSync((prev) => {
+        const prevRecipe = prev.recipes.find((r) => r.id === id);
         const updatedRecipes = prev.recipes.map((r) => (r.id === id ? updateRecipe(r, draft) : r));
         const updatedRecipe = updatedRecipes.find((r) => r.id === id);
 
@@ -286,7 +358,19 @@ return () => {
             }
           : prev.mealPlan;
 
-        return { ...prev, recipes: updatedRecipes, mealPlan: updatedMealPlan };
+        // Kitchen Wrapped: log a cook event whenever this save actually
+        // changed lastCookedAt to a new, non-null value — covers both the
+        // full edit form and the inline "last cooked" date editor on the
+        // recipe page. A save that leaves lastCookedAt untouched (the
+        // common case — editing ingredients, etc.) logs nothing.
+        const shouldLogCook =
+          updatedRecipe?.lastCookedAt != null &&
+          updatedRecipe.lastCookedAt !== prevRecipe?.lastCookedAt;
+        const updatedCookLog = shouldLogCook
+          ? [...prev.cookLog, createCookEvent(updatedRecipe, updatedRecipe.lastCookedAt as string)]
+          : prev.cookLog;
+
+        return { ...prev, recipes: updatedRecipes, mealPlan: updatedMealPlan, cookLog: updatedCookLog };
       });
     },
     [persistAndSync],
@@ -516,18 +600,28 @@ return () => {
         const slot = prev.mealPlan.slots.find((s) => s.date === date);
 
         // If cooked, also stamp lastCookedAt on the recipe
+        const cookedAt = new Date(date + "T12:00:00").toISOString();
         const updatedRecipes =
           cooked && slot?.recipeId
             ? prev.recipes.map((r) =>
                 r.id === slot.recipeId
-                ? { ...r, lastCookedAt: new Date(date + "T12:00:00").toISOString() }
+                ? { ...r, lastCookedAt: cookedAt }
                   : r,
               )
             : prev.recipes;
 
+        // Kitchen Wrapped: log the cook
+        const cookedRecipe = cooked && slot?.recipeId
+          ? updatedRecipes.find((r) => r.id === slot.recipeId)
+          : undefined;
+        const updatedCookLog = cookedRecipe
+          ? [...prev.cookLog, createCookEvent(cookedRecipe, cookedAt)]
+          : prev.cookLog;
+
         return {
           ...prev,
           recipes: updatedRecipes,
+          cookLog: updatedCookLog,
           mealPlan: {
             ...prev.mealPlan,
             slots: prev.mealPlan.slots.map((s) =>
@@ -652,11 +746,19 @@ return () => {
         if (!prev.mealPlan) return prev;
 
         // Stamp lastCookedAt on the recipe with the original date
+        const cookedAt = new Date(date + "T12:00:00").toISOString();
         const updatedRecipes = prev.recipes.map((r) =>
           r.id === recipeId
-            ? { ...r, lastCookedAt: new Date(date + "T12:00:00").toISOString() }
+            ? { ...r, lastCookedAt: cookedAt }
             : r,
         );
+
+        // Kitchen Wrapped: this always represents a real, telemetry-confirmed
+        // cook, so it always logs an event.
+        const cookedRecipe = updatedRecipes.find((r) => r.id === recipeId);
+        const updatedCookLog = cookedRecipe
+          ? [...prev.cookLog, createCookEvent(cookedRecipe, cookedAt)]
+          : prev.cookLog;
 
         // Upsert the slot as cooked
         const exists = prev.mealPlan.slots.some((s) => s.date === date);
@@ -674,6 +776,7 @@ return () => {
         return {
           ...prev,
           recipes: updatedRecipes,
+          cookLog: updatedCookLog,
           mealPlan: { ...prev.mealPlan, slots: updatedSlots },
         };
       });
@@ -702,6 +805,7 @@ return () => {
       cloudEnabled,
       plannerConfig: data.plannerConfig,
       mealPlan: data.mealPlan,
+      cookLog: data.cookLog,
       pendingConfirmations,
       addRecipe,
       updateRecipeById,

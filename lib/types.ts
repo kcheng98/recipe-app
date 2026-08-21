@@ -51,6 +51,10 @@ export type AppData = {
   // Planner config and active week plan live here so they sync across devices
   plannerConfig: PlannerConfig | null;
   mealPlan: MealPlan | null;
+  // Append-only cook history, powering Kitchen Wrapped. Every recipe only
+  // carries its single most recent lastCookedAt — this is the record of
+  // every time, so month/year stats can be reconstructed later.
+  cookLog: CookEvent[];
 };
 
 export type RecipeDraft = Omit<Recipe, "id" | "createdAt" | "updatedAt">;
@@ -142,4 +146,27 @@ export type MealPlan = {
 export type ScoredRecipe = {
   recipe: Recipe;
   score: number;
+};
+
+// ─── Kitchen Wrapped ────────────────────────────────────────────────────────
+
+/**
+ * One record of an actual cook, appended (never edited/removed) any time
+ * lastCookedAt gets stamped on a recipe — from the edit-page/inline date
+ * editor, a confirmed planner slot, or a telemetry-confirmed history slot.
+ *
+ * `recipeTitle` and `proteinType` are snapshotted at the time of the cook —
+ * not looked up live — so Kitchen Wrapped keeps working (and keeps its
+ * historical protein mix accurate) even if a recipe is later renamed,
+ * re-categorized, or deleted entirely. `folderId` and the photo are looked
+ * up live from the current recipe, since those are more "my library is
+ * organized this way now" facts than historical ones.
+ */
+export type CookEvent = {
+  id: string;
+  recipeId: string;
+  recipeTitle: string;
+  proteinType: ProteinType;
+  /** ISO timestamp — the date being credited for this cook. */
+  cookedAt: string;
 };
