@@ -19,6 +19,11 @@ export function loadAppData(): AppData {
     parsed.folders.sort((a, b) => a.order - b.order);
     parsed.plannerConfig = normalizePlannerConfig(parsed.plannerConfig);
     parsed.nutrition = normalizeNutritionConfig(parsed.nutrition);
+    // Prune Kitchen Wrapped cook-log entries left over from a deleted recipe
+    // (deleteRecipe now cascades going forward, but this cleans up anything
+    // already orphaned in previously-saved data).
+    const validRecipeIds = new Set(parsed.recipes.map((r) => r.id));
+    parsed.cookLog = (parsed.cookLog ?? []).filter((event) => validRecipeIds.has(event.recipeId));
     return parsed;
   } catch {
     return defaultAppData;

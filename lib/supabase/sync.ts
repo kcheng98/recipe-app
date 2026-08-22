@@ -139,21 +139,33 @@ export function subscribeToCloudData(
 }
 
 function normalizeAppData(raw: AppData): AppData {
+  const recipes = (raw.recipes ?? defaultAppData.recipes).map((recipe) => ({
+    ...recipe,
+    prepTime: recipe.prepTime ?? "",
+    cookTime: recipe.cookTime ?? "",
+    totalTime: recipe.totalTime ?? "",
+    yields: (recipe as unknown as Record<string, string>)["servings"] ?? recipe.yields ?? "",
+    notes: recipe.notes ?? "",
+    author: recipe.author ?? "",
+    recipeSite: recipe.recipeSite ?? "",
+    // ── Pillar defaults for existing recipes ──
+    proteinType: recipe.proteinType ?? "none",
+    lastCookedAt: recipe.lastCookedAt ?? null,
+    vibe: recipe.vibe ?? "all-weather",
+  }));
+
+  // Kitchen Wrapped's cook log now cascades with recipe deletion (deleteRecipe
+  // in AppProvider filters it directly), but that only covers deletions from
+  // here forward. This prunes any entries that already point at a recipe id
+  // that no longer exists — leftover ghosts from before that fix, or from a
+  // recipe deleted on another device — every time data is normalized.
+  const validRecipeIds = new Set(recipes.map((r) => r.id));
+  const cookLog = (raw.cookLog ?? defaultAppData.cookLog).filter((event) =>
+    validRecipeIds.has(event.recipeId),
+  );
+
   return {
-    recipes: (raw.recipes ?? defaultAppData.recipes).map((recipe) => ({
-      ...recipe,
-      prepTime: recipe.prepTime ?? "",
-      cookTime: recipe.cookTime ?? "",
-      totalTime: recipe.totalTime ?? "",
-      yields: (recipe as unknown as Record<string, string>)["servings"] ?? recipe.yields ?? "",
-      notes: recipe.notes ?? "",
-      author: recipe.author ?? "",
-      recipeSite: recipe.recipeSite ?? "",
-      // ── Pillar defaults for existing recipes ──
-      proteinType: recipe.proteinType ?? "none",
-      lastCookedAt: recipe.lastCookedAt ?? null,
-      vibe: recipe.vibe ?? "all-weather",
-    })),
+    recipes,
     labels: raw.labels ?? [],
     folders: (raw.folders ?? defaultAppData.folders).map((folder, index) => ({
       ...folder,
@@ -162,8 +174,8 @@ function normalizeAppData(raw: AppData): AppData {
     // ── Planner fields ──
     plannerConfig: normalizePlannerConfig(raw.plannerConfig),
     mealPlan: raw.mealPlan ?? null,
-    // ── Kitchen Wrapped ── (missing entirely for data saved before this shipped)
-    cookLog: raw.cookLog ?? defaultAppData.cookLog,
+    // ── Kitchen Wrapped ──
+    cookLog,
     // ── Protein Math ── (missing entirely for data saved before this shipped)
     nutrition: normalizeNutritionConfig(raw.nutrition),
   };

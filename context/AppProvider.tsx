@@ -400,6 +400,10 @@ return () => {
       persistAndSync((prev) => ({
         ...prev,
         recipes: prev.recipes.filter((r) => r.id !== id),
+        // Kitchen Wrapped's cook log cascades with the recipe: a deleted
+        // recipe's logged cooks shouldn't keep showing up in "this month" /
+        // "this year" stats as if it still existed.
+        cookLog: prev.cookLog.filter((event) => event.recipeId !== id),
       }));
     },
     [persistAndSync],

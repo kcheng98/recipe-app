@@ -153,16 +153,20 @@ export type ScoredRecipe = {
 // ─── Kitchen Wrapped ────────────────────────────────────────────────────────
 
 /**
- * One record of an actual cook, appended (never edited/removed) any time
- * lastCookedAt gets stamped on a recipe — from the edit-page/inline date
- * editor, a confirmed planner slot, or a telemetry-confirmed history slot.
+ * One record of an actual cook, appended any time lastCookedAt gets stamped
+ * on a recipe — from the edit-page/inline date editor, a confirmed planner
+ * slot, or a telemetry-confirmed history slot. Removed in bulk when its
+ * recipe is deleted (see deleteRecipe in AppProvider, and the cookLog
+ * pruning in normalizeAppData / loadAppData for entries already orphaned
+ * before that existed) — a deleted recipe's cooks shouldn't keep showing up
+ * in Kitchen Wrapped.
  *
  * `recipeTitle` and `proteinType` are snapshotted at the time of the cook —
  * not looked up live — so Kitchen Wrapped keeps working (and keeps its
- * historical protein mix accurate) even if a recipe is later renamed,
- * re-categorized, or deleted entirely. `folderId` and the photo are looked
- * up live from the current recipe, since those are more "my library is
- * organized this way now" facts than historical ones.
+ * historical protein mix accurate) even if a recipe is later renamed or
+ * re-categorized, while it's still in the library. `folderId` and the photo
+ * are looked up live from the current recipe, since those are more "my
+ * library is organized this way now" facts than historical ones.
  */
 export type CookEvent = {
   id: string;
