@@ -62,9 +62,27 @@ export const defaultNutritionConfig: NutritionConfig = {
 };
 
 /**
+ * Ids of protein entries that used to ship as defaults and have since been
+ * retired (the "All Other X" catch-all buckets). Removing them from
+ * `defaultProteinSources` above only affects brand-new accounts — anyone
+ * whose NutritionConfig was already seeded/synced before that change still
+ * has these sitting in their saved data. Every normalize pass strips them
+ * out again so already-synced accounts actually lose them too, not just new
+ * ones.
+ */
+const REMOVED_PROTEIN_IDS = new Set([
+  "protein-other-poultry",
+  "protein-other-pork",
+  "protein-other-red-meat",
+  "protein-other-fish",
+]);
+
+/**
  * Defends against a malformed/partial NutritionConfig (e.g. an older or
  * hand-edited cloud row) — falls back to the full default rather than
- * letting `.people[0]`/`.people[1]` crash on an unexpected shape.
+ * letting `.people[0]`/`.people[1]` crash on an unexpected shape. Also
+ * scrubs any retired protein entries (see REMOVED_PROTEIN_IDS) out of
+ * already-saved data, every time.
  */
 export function normalizeNutritionConfig(
   config: NutritionConfig | null | undefined,
@@ -72,9 +90,10 @@ export function normalizeNutritionConfig(
   if (!config || !Array.isArray(config.people) || config.people.length !== 2) {
     return defaultNutritionConfig;
   }
+  const proteins = Array.isArray(config.proteins) ? config.proteins : [];
   return {
     people: config.people,
-    proteins: Array.isArray(config.proteins) ? config.proteins : [],
+    proteins: proteins.filter((p) => !REMOVED_PROTEIN_IDS.has(p.id)),
   };
 }
 
