@@ -52,12 +52,26 @@ export default function CookModePage() {
   const steps = splitLines(recipe.instructions);
 
   // ── Last cooked inline editing ─────────────────────────────────────────────
+  // Picking a date is staged in local state (pendingLastCooked) and only
+  // written to the recipe — which is what logs a Kitchen Wrapped cook —
+  // once "Save" is clicked. Just opening the picker or clicking around in
+  // the calendar (including a misclick) no longer saves anything by itself.
   const [editingLastCooked, setEditingLastCooked] = useState(false);
+  const [pendingLastCooked, setPendingLastCooked] = useState("");
 
-  const handleLastCookedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value; // "YYYY-MM-DD" or "" if cleared
-    const newLastCookedAt = val
-      ? new Date(val + "T12:00:00").toISOString()
+  // Format lastCookedAt ISO → "YYYY-MM-DD" for the date input value
+  const lastCookedInputValue = recipe.lastCookedAt
+    ? recipe.lastCookedAt.slice(0, 10)
+    : "";
+
+  const startEditingLastCooked = () => {
+    setPendingLastCooked(lastCookedInputValue);
+    setEditingLastCooked(true);
+  };
+
+  const handleSaveLastCooked = () => {
+    const newLastCookedAt = pendingLastCooked
+      ? new Date(pendingLastCooked + "T12:00:00").toISOString()
       : null;
     // updateRecipeById expects a full RecipeDraft — spread the recipe minus
     // id/createdAt/updatedAt (those are re-applied inside updateRecipe)
@@ -66,9 +80,15 @@ export default function CookModePage() {
     setEditingLastCooked(false);
   };
 
+  const handleCancelLastCooked = () => {
+    setEditingLastCooked(false);
+  };
+
   // A standalone "Clear" control, separate from the date input above — the
   // browser's own clear/X affordance on <input type="date"> only shows up
-  // reliably on desktop, not on phone. This works the same everywhere.
+  // reliably on desktop, not on phone. This works the same everywhere, and
+  // (unlike the picker) is already a single deliberate action, so it saves
+  // immediately rather than needing its own Save step.
   const handleClearLastCooked = () => {
     const { id: _id, createdAt: _c, updatedAt: _u, ...draft } = recipe;
     updateRecipeById(recipe.id, { ...draft, lastCookedAt: null });
@@ -83,11 +103,6 @@ export default function CookModePage() {
         year: "numeric",
       })
     : null;
-
-  // Format lastCookedAt ISO → "YYYY-MM-DD" for the date input value
-  const lastCookedInputValue = recipe.lastCookedAt
-    ? recipe.lastCookedAt.slice(0, 10)
-    : "";
 
   return (
     <div className="min-h-screen bg-white pb-24 text-[#1d1d1f]">
@@ -135,19 +150,38 @@ export default function CookModePage() {
               Last cooked:
             </span>
             {editingLastCooked ? (
-              <input
-                type="date"
-                defaultValue={lastCookedInputValue}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={handleLastCookedChange}
-                onBlur={() => setEditingLastCooked(false)}
-                autoFocus
-                className="rounded-lg border border-[#0071e3] px-2 py-0.5 text-sm text-[#1d1d1f]
-                           focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
-              />
+              <span className="inline-flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={pendingLastCooked}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setPendingLastCooked(e.target.value)}
+                  autoFocus
+                  className="rounded-lg border border-[#0071e3] px-2 py-0.5 text-sm text-[#1d1d1f]
+                             focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30"
+                />
+                {/* Picking a date only stages it above — nothing is saved
+                    (and no cook gets logged) until Save is clicked, so an
+                    accidental tap on the wrong day in the calendar is free
+                    to back out of with Cancel. */}
+                <button
+                  type="button"
+                  onClick={handleSaveLastCooked}
+                  className="text-xs font-semibold text-[#0071e3] hover:underline"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelLastCooked}
+                  className="text-xs text-[#86868b] hover:underline"
+                >
+                  Cancel
+                </button>
+              </span>
             ) : (
               <button
-                onClick={() => setEditingLastCooked(true)}
+                onClick={startEditingLastCooked}
                 className="group flex items-center gap-1 text-sm text-[#86868b]
                            hover:text-[#0071e3] transition-colors"
                 title="Click to set last cooked date"
