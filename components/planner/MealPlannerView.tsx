@@ -186,7 +186,7 @@ function DayCard({
         <p className="text-xs font-semibold text-gray-400 mb-0.5">{formatDayLabel(slot.date)}</p>
         {recipe ? (
           <Link
-            href={`/recipes/${recipe.id}?from=planner`}
+            href={`/recipe/recipes/${recipe.id}?from=planner`}
             className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2 hover:text-orange-500 transition-colors"
           >
             {recipe.title}

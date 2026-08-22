@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import { AppProvider } from "@/context/AppProvider";
-import { ClientShell } from "@/components/ClientShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Our Recipes",
-  description: "A private recipe organizer for our kitchen",
+  title: "Homebase",
+  description: "Household apps — recipes, maintenance, and more",
 };
 
 export const viewport = {
@@ -22,9 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen antialiased overflow-x-hidden">
-        <AppProvider>
-          <ClientShell>{children}</ClientShell>
-        </AppProvider>
+        {children}
       </body>
     </html>
   );

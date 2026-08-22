@@ -49,7 +49,7 @@ export default function RecipeCard({ recipe, labels }: RecipeCardProps) {
   const cookedLabel = lastCookedLabel(recipe);
 
   return (
-    <Link href={`/recipes/${recipe.id}`} className="block h-full">
+    <Link href={`/recipe/recipes/${recipe.id}`} className="block h-full">
       <article className="group overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-[#e5e5ea] transition hover:shadow-md h-full flex flex-col">
       <div className="relative aspect-[3/2] overflow-hidden bg-[#f5f5f7]">
           {recipe.imageUrl ? (

@@ -1,14 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useApp } from "@/context/AppProvider";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { fetchMaintenanceCloudData } from "@/lib/supabase/maintenanceSync";
+import { loadMaintenanceData } from "@/lib/maintenance/storage";
+import type { MaintenanceData } from "@/lib/maintenance/types";
 
 const LAST_EXPORT_KEY = "recipe-app-last-export-v1";
 const EXPORT_REMINDER_DAYS = 30;
 
+/**
+ * This is the whole-of-Homebase backup file, not just Kitchen's — it's the
+ * lightweight, phone-usable safety net; a real `supabase db dump` is still
+ * the ground-truth backup. exportFormatVersion 2 adds the `maintenance`
+ * field; a version-1 file (no maintenance key) is still readable, it just
+ * won't have any maintenance items to restore from.
+ */
 function buildExportPayload(app: {
   recipes: unknown;
   labels: unknown;
@@ -17,10 +27,11 @@ function buildExportPayload(app: {
   mealPlan: unknown;
   cookLog: unknown;
   nutrition: unknown;
+  maintenance: MaintenanceData;
 }) {
   return {
     exportedAt: new Date().toISOString(),
-    exportFormatVersion: 1,
+    exportFormatVersion: 2,
     recipes: app.recipes,
     labels: app.labels,
     folders: app.folders,
@@ -28,7 +39,23 @@ function buildExportPayload(app: {
     mealPlan: app.mealPlan,
     cookLog: app.cookLog,
     nutrition: app.nutrition,
+    maintenance: app.maintenance,
   };
+}
+
+/**
+ * Maintenance's data isn't available through React context on this page
+ * (MaintenanceProvider only wraps /maintenance, deliberately — see the
+ * module-separation decision), so this pulls it directly: the authoritative
+ * cloud copy when signed in, falling back to this browser's local cache
+ * otherwise. Either way it reflects real data, not a stale placeholder.
+ */
+async function getMaintenanceDataForExport(userId: string | undefined): Promise<MaintenanceData> {
+  if (userId) {
+    const cloud = await fetchMaintenanceCloudData(userId);
+    if (cloud.status === "found") return cloud.data;
+  }
+  return loadMaintenanceData();
 }
 
 function downloadJson(payload: unknown, filename: string) {
@@ -45,11 +72,12 @@ function downloadJson(payload: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
+function AccountSettings({ userEmail, backHref }: { userEmail: string | undefined; backHref: string }) {
   const router = useRouter();
-  const { recipes, labels, folders, plannerConfig, mealPlan, cookLog, nutrition, syncStatus } = useApp();
+  const { user, recipes, labels, folders, plannerConfig, mealPlan, cookLog, nutrition, syncStatus } = useApp();
   const [lastExportedAt, setLastExportedAt] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     try {
@@ -64,16 +92,24 @@ function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
     : null;
   const shouldNudge = daysSinceExport === null || daysSinceExport >= EXPORT_REMINDER_DAYS;
 
-  function handleExport() {
-    const payload = buildExportPayload({ recipes, labels, folders, plannerConfig, mealPlan, cookLog, nutrition });
-    const stamp = new Date().toISOString().slice(0, 10);
-    downloadJson(payload, `kitchen-library-export-${stamp}.json`);
+  async function handleExport() {
+    setExporting(true);
     try {
-      const now = new Date().toISOString();
-      localStorage.setItem(LAST_EXPORT_KEY, now);
-      setLastExportedAt(now);
-    } catch {
-      // localStorage unavailable — the export itself still succeeded.
+      const maintenance = await getMaintenanceDataForExport(user?.id);
+      const payload = buildExportPayload({
+        recipes, labels, folders, plannerConfig, mealPlan, cookLog, nutrition, maintenance,
+      });
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJson(payload, `homebase-export-${stamp}.json`);
+      try {
+        const now = new Date().toISOString();
+        localStorage.setItem(LAST_EXPORT_KEY, now);
+        setLastExportedAt(now);
+      } catch {
+        // localStorage unavailable — the export itself still succeeded.
+      }
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -82,14 +118,14 @@ function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
     if (!supabase) return;
     setSigningOut(true);
     await supabase.auth.signOut();
-    router.push("/");
+    router.push(backHref);
     router.refresh();
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-4 py-10">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-[#e5e5ea]">
-        <Link href="/" className="text-sm text-[#0071e3] hover:underline">
+        <Link href={backHref} className="text-sm text-[#0071e3] hover:underline">
           ← Back
         </Link>
         <h1 className="mt-4 text-2xl font-semibold text-[#1d1d1f]">
@@ -111,9 +147,12 @@ function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
         <div className="mt-6 rounded-xl border border-[#e5e5ea] p-4">
           <p className="text-sm font-medium text-[#1d1d1f]">Export my data</p>
           <p className="mt-1 text-sm text-[#86868b]">
-            Downloads every recipe, folder, label, planner setting, meal plan, and your
-            full cook history as one JSON file — a personal backup you control, separate
-            from cloud sync.
+            Downloads every recipe, folder, label, planner setting, meal plan, and full
+            cook history — plus every Maintenance item and its history — as one JSON
+            file covering all of Homebase. A personal backup you control, separate from
+            cloud sync. (For real disaster recovery, also run a Supabase database
+            backup periodically — this file is the convenient day-to-day copy, not a
+            replacement for that.)
           </p>
           {shouldNudge ? (
             <p className="mt-3 rounded-lg bg-[#fff8ec] px-3 py-2 text-xs text-[#8a6d1a]">
@@ -129,9 +168,10 @@ function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
           <button
             type="button"
             onClick={handleExport}
-            className="mt-3 w-full rounded-xl bg-[#0071e3] py-2.5 text-sm font-semibold text-white hover:bg-[#0077ed]"
+            disabled={exporting}
+            className="mt-3 w-full rounded-xl bg-[#0071e3] py-2.5 text-sm font-semibold text-white hover:bg-[#0077ed] disabled:opacity-50"
           >
-            Download export (.json)
+            {exporting ? "Gathering data…" : "Download export (.json)"}
           </button>
         </div>
 
@@ -148,8 +188,10 @@ function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
   );
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const backHref = searchParams.get("from") || "/recipe";
   const { user } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -165,7 +207,7 @@ export default function LoginPage() {
           Add Supabase keys to <code className="text-[#515154]">.env.local</code>{" "}
           (see <code className="text-[#515154]">.env.example</code>).
         </p>
-        <Link href="/" className="text-[#0071e3]">
+        <Link href={backHref} className="text-[#0071e3]">
           Back home
         </Link>
       </div>
@@ -173,7 +215,7 @@ export default function LoginPage() {
   }
 
   if (user) {
-    return <AccountSettings userEmail={user.email} />;
+    return <AccountSettings userEmail={user.email} backHref={backHref} />;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -201,14 +243,14 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/");
+    router.push(backHref);
     router.refresh();
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-[#e5e5ea]">
-        <Link href="/" className="text-sm text-[#0071e3] hover:underline">
+        <Link href={backHref} className="text-sm text-[#0071e3] hover:underline">
           ← Back
         </Link>
         <h1 className="mt-4 text-2xl font-semibold text-[#1d1d1f]">
@@ -275,5 +317,13 @@ export default function LoginPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

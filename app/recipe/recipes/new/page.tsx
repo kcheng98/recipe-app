@@ -35,7 +35,7 @@ export default function NewRecipePage() {
     // replacing it with the new recipe's detail page means "← Recipes" goes
     // straight back to Home, instead of landing back on this Add-recipe
     // screen for a recipe that's already been saved.
-    router.replace(`/recipes/${recipe.id}`);
+    router.replace(`/recipe/recipes/${recipe.id}`);
   }
 
   return (

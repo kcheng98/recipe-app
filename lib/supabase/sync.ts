@@ -105,12 +105,65 @@ export async function saveCloudData(
   return { status: "ok", version: nextVersion };
 }
 
+export type ForceOverwriteResult =
+  | { status: "ok"; version: number }
+  | { status: "error"; error: unknown };
+
+/**
+ * Deliberately bypasses the optimistic-concurrency guard. Every other write
+ * in this file refuses to clobber a newer save it didn't know about — that
+ * protection is exactly right for background/automatic saves. This
+ * function exists for the one case where a HUMAN has explicitly reviewed
+ * both copies and said "no, overwrite the cloud with my device's data
+ * anyway" (the "Keep local" side of the conflict-resolution banner). It
+ * still bumps the version counter forward so subsequent normal saves stay
+ * correctly guarded.
+ */
+export async function forceOverwriteCloudData(
+  userId: string,
+  appData: AppData,
+): Promise<ForceOverwriteResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { status: "ok", version: 1 };
+
+  const current = await fetchCloudData(userId);
+
+  if (current.status === "not-found") {
+    const { error } = await supabase.from(TABLE).insert({
+      user_id: userId,
+      data: appData,
+      version: 1,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { status: "error", error };
+    return { status: "ok", version: 1 };
+  }
+
+  const nextVersion = current.status === "found" ? current.version + 1 : 1;
+  const { error } = await supabase
+    .from(TABLE)
+    .update({ data: appData, version: nextVersion, updated_at: new Date().toISOString() })
+    .eq("user_id", userId);
+
+  if (error) return { status: "error", error };
+  return { status: "ok", version: nextVersion };
+}
+
 export function subscribeToCloudData(
   userId: string,
   onUpdate: (data: AppData, version: number) => void,
 ): () => void {
   const supabase = getSupabase();
   if (!supabase) return () => {};
+
+  // React dev-mode (Strict Mode) runs effects twice on mount, which can call
+  // this twice in quick succession before the first channel's cleanup runs.
+  // supabase-js caches channels by topic name and refuses to re-attach
+  // .on() listeners to one that's already subscribed — remove any stale
+  // channel with this exact name first so a re-subscribe never collides.
+  const topic = `realtime:recipe_library_${userId}`;
+  const existing = supabase.getChannels().find((ch) => ch.topic === topic);
+  if (existing) supabase.removeChannel(existing);
 
   const channel = supabase
     .channel(`recipe_library_${userId}`)

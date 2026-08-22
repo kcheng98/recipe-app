@@ -33,9 +33,9 @@ export default function Sidebar({
     ...folders,
   ];
 
-  const isPlannerActive = pathname === "/planner";
-  const isWrappedActive = pathname === "/wrapped";
-  const isNutritionActive = pathname === "/nutrition";
+  const isPlannerActive = pathname === "/recipe/planner";
+  const isWrappedActive = pathname === "/recipe/wrapped";
+  const isNutritionActive = pathname === "/recipe/nutrition";
 
   return (
     <>
@@ -53,10 +53,19 @@ export default function Sidebar({
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-16 items-center px-6">
+        <div className="flex h-16 flex-col justify-center px-6">
           <h1 className="text-xl font-bold tracking-tight text-[#1d1d1f]">
-            Kitchen Library
+            Kitchen
           </h1>
+          <Link
+            href="/"
+            className="-mt-0.5 flex items-center gap-1 text-xs text-[#86868b] hover:text-[#0071e3]"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 6 9 12l6 6" />
+            </svg>
+            Homebase
+          </Link>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -74,7 +83,7 @@ export default function Sidebar({
                     type="button"
                     onClick={() => {
                       if (isPlannerActive || isWrappedActive || isNutritionActive) {
-                        window.location.href = folder.id === ALL_FOLDER_ID ? "/" : `/?folder=${folder.id}`;
+                        window.location.href = folder.id === ALL_FOLDER_ID ? "/recipe" : `/recipe?folder=${folder.id}`;
                       } else {
                         onFolderSelect(folder.id);
                       }
@@ -108,7 +117,7 @@ export default function Sidebar({
           <ul className="space-y-0.5">
             <li>
               <Link
-                href="/planner"
+                href="/recipe/planner"
                 onClick={onClose}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
                   isPlannerActive
@@ -122,7 +131,7 @@ export default function Sidebar({
             </li>
             <li>
               <Link
-                href="/wrapped"
+                href="/recipe/wrapped"
                 onClick={onClose}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
                   isWrappedActive
@@ -136,7 +145,7 @@ export default function Sidebar({
             </li>
             <li>
               <Link
-                href="/nutrition"
+                href="/recipe/nutrition"
                 onClick={onClose}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
                   isNutritionActive
@@ -167,14 +176,14 @@ export default function Sidebar({
             Manage labels
           </button>
           <Link
-            href="/recipes/new"
+            href="/recipe/recipes/new"
             className="mt-2 flex w-full items-center justify-center rounded-xl bg-[#0071e3] py-3 text-sm font-semibold text-white hover:bg-[#0077ed]"
           >
             + Add recipe
           </Link>
           {cloudEnabled ? (
             <Link
-              href="/login"
+              href="/recipe/login"
               className="mt-3 block rounded-xl px-3 py-2 text-sm text-[#515154] hover:bg-[#f5f5f7]"
             >
               {user

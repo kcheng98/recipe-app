@@ -14,9 +14,11 @@ import { createId, loadAppData, saveAppData } from "@/lib/storage";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   fetchCloudData,
+  forceOverwriteCloudData,
   saveCloudData,
   subscribeToCloudData,
 } from "@/lib/supabase/sync";
+import { isSuspiciousDataLoss } from "@/lib/syncGuard";
 import type {
   AppData,
   CookEvent,
@@ -40,6 +42,20 @@ import type { User } from "@supabase/supabase-js";
 
 type SyncStatus = "local" | "syncing" | "synced" | "offline" | "conflict";
 
+/**
+ * A paused, unresolved divergence between this device's data and the
+ * cloud's — surfaced whenever adopting the cloud copy automatically would
+ * look like accidental data loss (see lib/syncGuard.ts). Nothing is
+ * touched until resolveConflict() is called with a human's choice.
+ */
+export type PendingConflict = {
+  localData: AppData;
+  remoteData: AppData;
+  remoteVersion: number;
+  localCount: number;
+  remoteCount: number;
+};
+
 type AppContextValue = {
   // ── Core state ────────────────────────────────────────────────────────────
   ready: boolean;
@@ -49,6 +65,10 @@ type AppContextValue = {
   user: User | null;
   syncStatus: SyncStatus;
   cloudEnabled: boolean;
+  /** Non-null when this device's data and the cloud's have diverged enough to need a human decision. */
+  conflict: PendingConflict | null;
+  /** Applies the human's choice from the conflict banner. */
+  resolveConflict: (choice: "keep-local" | "use-remote") => Promise<void>;
 
   // ── Planner state ─────────────────────────────────────────────────────────
   plannerConfig: PlannerConfig | null;
@@ -148,12 +168,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("local");
+  const [conflict, setConflict] = useState<PendingConflict | null>(null);
   const cloudEnabled = isSupabaseConfigured();
 
   // Keep a ref to the latest user so persistAndSync can always access it
   // without needing to be recreated every time user changes.
   const userRef = useRef<User | null>(null);
   userRef.current = user;
+  // Same idea, for the realtime subscription callback below — it's set up
+  // once per sign-in and would otherwise close over a stale `data` value.
+  const dataRef = useRef<AppData>(data);
+  dataRef.current = data;
   const unsubscribeRealtimeRef = useRef<(() => void) | undefined>(undefined);
   const isSavingRef = useRef<boolean>(false);
   // The version of the row we last read from (or wrote to) Supabase. Every
@@ -189,9 +214,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               // Conflict: another device/tab saved first. Never retry blind
               // with our stale copy — pull down whatever's actually there
               // now, so this device converges on the same truth instead of
-              // fighting over which write wins.
+              // fighting over which write wins. UNLESS adopting it would
+              // mean silently losing real data (see lib/syncGuard.ts) — that
+              // pauses for a human decision instead of auto-resolving.
               const fresh = await fetchCloudData(currentUser.id);
               if (fresh.status === "found") {
+                const localCount = next.recipes.length;
+                const remoteCount = fresh.data.recipes.length;
+                if (isSuspiciousDataLoss(localCount, remoteCount)) {
+                  setConflict({
+                    localData: next,
+                    remoteData: fresh.data,
+                    remoteVersion: fresh.version,
+                    localCount,
+                    remoteCount,
+                  });
+                  setSyncStatus("conflict");
+                  return;
+                }
                 cloudVersionRef.current = fresh.version;
                 setData(fresh.data);
                 saveAppData(fresh.data);
@@ -239,11 +279,30 @@ async function loadForUser(currentUser: User | null) {
   const result = await fetchCloudData(currentUser.id);
 
   if (result.status === "found") {
-    // The normal case: a real row exists — use it, full stop.
-    setData(result.data);
-    saveAppData(result.data);
-    cloudVersionRef.current = result.version;
-    setSyncStatus("synced");
+    // The normal case: a real row exists — use it. But compare against
+    // what THIS device already has cached locally first — a fresh page
+    // load (e.g. opening the app on your phone) is exactly the path that
+    // silently adopted a wiped/smaller cloud copy before this fix, since
+    // it never checked what it was overwriting.
+    const local = loadAppData();
+    const localCount = local.recipes.length;
+    const remoteCount = result.data.recipes.length;
+    if (isSuspiciousDataLoss(localCount, remoteCount)) {
+      setData(local);
+      setConflict({
+        localData: local,
+        remoteData: result.data,
+        remoteVersion: result.version,
+        localCount,
+        remoteCount,
+      });
+      setSyncStatus("conflict");
+    } else {
+      setData(result.data);
+      saveAppData(result.data);
+      cloudVersionRef.current = result.version;
+      setSyncStatus("synced");
+    }
   } else if (result.status === "not-found") {
     // Supabase POSITIVELY confirmed there's no row for this account yet
     // (not an error, not a timeout — an actual empty result). Only this
@@ -259,13 +318,27 @@ async function loadForUser(currentUser: User | null) {
       } else {
         // Someone/something created a row in the moment between our fetch
         // and our insert (e.g. two devices signing in for the first time
-        // at once). Don't fight over it — just re-fetch and take the truth.
+        // at once — this is the exact race that once wiped a real recipe
+        // library: don't just take whichever side won blindly).
         const refetch = await fetchCloudData(currentUser.id);
         if (refetch.status === "found") {
-          setData(refetch.data);
-          saveAppData(refetch.data);
-          cloudVersionRef.current = refetch.version;
-          setSyncStatus("synced");
+          const localCount = seed.recipes.length;
+          const remoteCount = refetch.data.recipes.length;
+          if (isSuspiciousDataLoss(localCount, remoteCount)) {
+            setConflict({
+              localData: seed,
+              remoteData: refetch.data,
+              remoteVersion: refetch.version,
+              localCount,
+              remoteCount,
+            });
+            setSyncStatus("conflict");
+          } else {
+            setData(refetch.data);
+            saveAppData(refetch.data);
+            cloudVersionRef.current = refetch.version;
+            setSyncStatus("synced");
+          }
         } else {
           setSyncStatus("offline");
         }
@@ -290,6 +363,22 @@ async function loadForUser(currentUser: User | null) {
   // duplicate event can never step backwards over a newer local write.
   unsubscribeRealtimeRef.current = subscribeToCloudData(currentUser.id, (fresh, version) => {
     if (cloudVersionRef.current !== null && version <= cloudVersionRef.current) return;
+    const localCount = dataRef.current.recipes.length;
+    const remoteCount = fresh.recipes.length;
+    if (isSuspiciousDataLoss(localCount, remoteCount)) {
+      // Another device just pushed something that looks like it erased real
+      // data — do NOT adopt it live. Leave cloudVersionRef alone too, so the
+      // next legitimate save still gets guarded correctly.
+      setConflict({
+        localData: dataRef.current,
+        remoteData: fresh,
+        remoteVersion: version,
+        localCount,
+        remoteCount,
+      });
+      setSyncStatus("conflict");
+      return;
+    }
     cloudVersionRef.current = version;
     setData(fresh);
     saveAppData(fresh);
@@ -691,6 +780,57 @@ return () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
+  /**
+   * Applies the human's decision from the conflict banner. "use-remote"
+   * simply adopts the cloud copy (the user is saying "the cloud is right,
+   * my local copy is stale/wrong"). "keep-local" force-pushes this
+   * device's data over whatever's currently in the cloud, bypassing the
+   * normal version guard — the one place in this file that's deliberate,
+   * since a human just explicitly reviewed both copies and chose.
+   */
+  const resolveConflict = useCallback(
+    async (choice: "keep-local" | "use-remote") => {
+      if (!conflict) return;
+
+      if (choice === "use-remote") {
+        cloudVersionRef.current = conflict.remoteVersion;
+        setData(conflict.remoteData);
+        saveAppData(conflict.remoteData);
+        setSyncStatus("synced");
+        setConflict(null);
+        return;
+      }
+
+      const currentUser = userRef.current;
+      if (!currentUser || !cloudEnabled) {
+        setData(conflict.localData);
+        saveAppData(conflict.localData);
+        setConflict(null);
+        setSyncStatus("local");
+        return;
+      }
+
+      setSyncStatus("syncing");
+      try {
+        const result = await forceOverwriteCloudData(currentUser.id, conflict.localData);
+        if (result.status === "ok") {
+          cloudVersionRef.current = result.version;
+          setData(conflict.localData);
+          saveAppData(conflict.localData);
+          setSyncStatus("synced");
+          setConflict(null);
+        } else {
+          // Write failed — leave the banner up so it can be retried rather
+          // than silently dropping the user's choice.
+          setSyncStatus("offline");
+        }
+      } catch {
+        setSyncStatus("offline");
+      }
+    },
+    [conflict, cloudEnabled],
+  );
+
   const reorderSlots = useCallback(
     (orderedDates: string[]) => {
       persistAndSync((prev) => {
@@ -836,6 +976,8 @@ return () => {
       user,
       syncStatus,
       cloudEnabled,
+      conflict,
+      resolveConflict,
       plannerConfig: data.plannerConfig,
       mealPlan: data.mealPlan,
       cookLog: data.cookLog,
@@ -868,6 +1010,8 @@ return () => {
       user,
       syncStatus,
       cloudEnabled,
+      conflict,
+      resolveConflict,
       setNutritionConfig,
       pendingConfirmations,
       addRecipe,

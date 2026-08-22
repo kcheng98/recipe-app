@@ -228,7 +228,7 @@ export default function HomePage() {
         </svg>
       </span>
     </button>
-    <Link href="/recipes/new" className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white">
+    <Link href="/recipe/recipes/new" className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white">
       Add
     </Link>
   </div>
@@ -335,7 +335,7 @@ export default function HomePage() {
               </p>
             </div>
             <Link
-              href="/recipes/new"
+              href="/recipe/recipes/new"
               className="hidden rounded-xl bg-[#0071e3] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0077ed] lg:inline-flex"
             >
               + Add recipe
@@ -361,7 +361,7 @@ export default function HomePage() {
                 Try a different search, folder, or label—or add your first recipe.
               </p>
               <Link
-                href="/recipes/new"
+                href="/recipe/recipes/new"
                 className="mt-6 rounded-xl bg-[#0071e3] px-6 py-3 text-sm font-semibold text-white"
               >
                 Add recipe

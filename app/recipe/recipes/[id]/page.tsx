@@ -40,7 +40,7 @@ export default function CookModePage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white px-4">
         <p className="text-lg text-[#1d1d1f]">Recipe not found</p>
-        <Link href="/" className="text-[#0071e3]">
+        <Link href="/recipe" className="text-[#0071e3]">
           Back home
         </Link>
       </div>
@@ -326,7 +326,7 @@ export default function CookModePage() {
       <footer className="fixed inset-x-0 bottom-0 z-30 border-t border-[#e5e5ea] bg-white/95 px-4 py-3 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl justify-center">
           <Link
-            href={`/recipes/${recipe.id}/edit`}
+            href={`/recipe/recipes/${recipe.id}/edit`}
             className="text-sm text-[#86868b] underline-offset-2 hover:text-[#515154] hover:underline"
           >
             Edit recipe

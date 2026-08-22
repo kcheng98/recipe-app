@@ -39,7 +39,7 @@ export default function EditRecipePage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
         <p className="text-lg text-[#1d1d1f]">Recipe not found</p>
-        <Link href="/" className="text-[#0071e3] hover:underline">
+        <Link href="/recipe" className="text-[#0071e3] hover:underline">
           Back to home
         </Link>
       </div>
@@ -119,7 +119,7 @@ export default function EditRecipePage() {
             onClick={() => {
               if (confirm("Delete this recipe permanently?")) {
                 deleteRecipe(id);
-                router.push("/");
+                router.push("/recipe");
               }
             }}
             className="mt-4 w-full rounded-xl px-4 py-3 text-sm text-red-600 ring-1 ring-red-200 hover:bg-red-50"
