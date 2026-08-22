@@ -74,7 +74,12 @@ export default function EditRecipePage() {
                   title: draft.title.trim(),
                   description: draft.description.trim() || draft.title.trim(),
                 });
-                router.push(`/recipes/${id}`);
+                // router.back(), not push — we always arrive at Edit from the
+                // recipe detail page, so going back lands exactly there (with
+                // the fresh data, since the page renders from live app state)
+                // without adding a new history entry. Pushing here was what
+                // made "← Recipes" take several clicks to reach home.
+                router.back();
               }}
               className="shrink-0 rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0077ed]"
             >
@@ -82,7 +87,7 @@ export default function EditRecipePage() {
             </button>
             <button
               type="button"
-              onClick={() => router.push(`/recipes/${id}`)}
+              onClick={() => router.back()}
               className="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:bg-[#f5f5f7]"
             >
               Cancel
@@ -103,9 +108,9 @@ export default function EditRecipePage() {
               title: draft.title.trim(),
               description: draft.description.trim() || draft.title.trim(),
             });
-            router.push(`/recipes/${id}`);
+            router.back();
           }}
-          onCancel={() => router.push(`/recipes/${id}`)}
+          onCancel={() => router.back()}
         />
 
         <div className="mx-auto max-w-3xl pb-8">

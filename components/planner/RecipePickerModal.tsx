@@ -7,7 +7,7 @@
  * Shows all recipes, searchable. Selecting one assigns it to the slot.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/context/AppProvider";
 import type { Recipe } from "@/lib/types";
 
@@ -75,6 +75,29 @@ export function RecipePickerModal({ date, onClose }: Props) {
   const { recipes, assignSlot } = useApp();
   const [query, setQuery] = useState("");
 
+  // Mobile browsers don't shrink a `vh`-sized `fixed inset-0` overlay when
+  // the on-screen keyboard opens — the layout viewport stays "full height"
+  // even though a chunk of it is now covered by the keyboard. That's why
+  // this bottom sheet (bottom-anchored, capped at a vh-based max-height)
+  // ended up positioned partly behind the keyboard, forcing a scroll to see
+  // the search input/results. The VisualViewport API reports the *actually
+  // visible* area, so track it and size/position the overlay to that
+  // directly — it updates live as the keyboard opens and closes.
+  const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setViewport({ height: vv.height, top: vv.offsetTop });
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return recipes;
@@ -92,10 +115,12 @@ export function RecipePickerModal({ date, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm"
+      style={viewport ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-sm bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[80vh]"
+        className="w-full max-w-sm bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[80dvh]"
+        style={viewport ? { maxHeight: viewport.height * 0.9 } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}

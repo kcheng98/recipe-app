@@ -27,6 +27,7 @@ type HomeViewState = {
   activeVibe?: string;
   activeProtein?: string;
   scrollTop?: number;
+  filtersCollapsed?: boolean;
 };
 
 const HOME_VIEW_STATE_KEY = "recipe-app-home-view-v1";
@@ -78,11 +79,17 @@ export default function HomePage() {
   const [activeProtein, setActiveProtein] = useState(
     () => readHomeViewState()?.activeProtein ?? "all",
   );
+  // Collapsing hides the search/mood/protein/label rows to save space once
+  // selections are made — it never resets them, and the toggle state itself
+  // persists the same way the filters do, so it holds across navigation.
+  const [filtersCollapsed, setFiltersCollapsed] = useState(
+    () => readHomeViewState()?.filtersCollapsed ?? false,
+  );
 
   // Persist filter selections as they change.
   useEffect(() => {
-    writeHomeViewState({ search, activeFolder, activeLabelId, activeVibe, activeProtein });
-  }, [search, activeFolder, activeLabelId, activeVibe, activeProtein]);
+    writeHomeViewState({ search, activeFolder, activeLabelId, activeVibe, activeProtein, filtersCollapsed });
+  }, [search, activeFolder, activeLabelId, activeVibe, activeProtein, filtersCollapsed]);
 
   // Persist + restore scroll position of the recipe list itself (it's the
   // scrollable region here, not the window).
@@ -191,7 +198,7 @@ export default function HomePage() {
         className="flex min-w-0 flex-1 flex-col overflow-y-auto"
       >
       <header className="sticky top-0 z-30 border-b border-[#e5e5ea]/80 bg-[#f5f5f7]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:px-8">
-  {/* Mobile: folder button + title + add */}
+  {/* Mobile: folder button + title + collapse toggle + add */}
   <div className="flex items-center justify-between gap-3 lg:hidden">
     <button
       type="button"
@@ -203,75 +210,116 @@ export default function HomePage() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     </button>
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">Our Recipes</p>
-      <p className="text-sm font-semibold text-[#1d1d1f]">{activeFolderLabel}</p>
-    </div>
+    <button
+      type="button"
+      onClick={() => setFiltersCollapsed((v) => !v)}
+      className="flex flex-1 flex-col items-center"
+      aria-expanded={!filtersCollapsed}
+      aria-label={filtersCollapsed ? "Show filters" : "Hide filters"}
+    >
+      <span className="text-xs font-medium uppercase tracking-wide text-[#86868b]">Our Recipes</span>
+      <span className="flex items-center gap-1 text-sm font-semibold text-[#1d1d1f]">
+        {activeFolderLabel}
+        <svg
+          className={`h-3.5 w-3.5 text-[#86868b] transition-transform ${filtersCollapsed ? "" : "rotate-180"}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+        </svg>
+      </span>
+    </button>
     <Link href="/recipes/new" className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white">
       Add
     </Link>
   </div>
 
-  {/* Row 1: Search + Moods */}
-  <div className="mt-4 flex flex-wrap gap-2 lg:mt-0 lg:flex-nowrap">
-    <div className="w-full lg:flex-1">
-      <SearchBar value={search} onChange={setSearch} />
+  {/* Desktop: folder name + count + collapse toggle (mobile shows this above instead) */}
+  <div className="hidden items-center justify-between lg:flex">
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-[#86868b]">Our Recipes</p>
+      <p className="text-sm font-semibold text-[#1d1d1f]">{activeFolderLabel}</p>
     </div>
-    <select
-      value={activeVibe}
-      onChange={(e) => setActiveVibe(e.target.value)}
-      className="w-[calc(50%-4px)] lg:w-auto rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
-      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+    <button
+      type="button"
+      onClick={() => setFiltersCollapsed((v) => !v)}
+      className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-[#515154] hover:bg-white"
+      aria-expanded={!filtersCollapsed}
+      aria-label={filtersCollapsed ? "Show filters" : "Hide filters"}
     >
-      <option value="all">All Moods</option>
-      <option value="light-fresh">🌿 Light &amp; Fresh</option>
-      <option value="all-weather">☁️ All-Weather</option>
-      <option value="heavy-rich">🍲 Heavy &amp; Rich</option>
-    </select>
+      {filtersCollapsed ? "Show filters" : "Hide filters"}
+      <svg
+        className={`h-4 w-4 transition-transform ${filtersCollapsed ? "" : "rotate-180"}`}
+        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+      </svg>
+    </button>
   </div>
 
-  {/* Row 2: Protein pills */}
-  <div className="mt-3 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-      {(["all", "poultry", "red-meat", "pork", "fish-seafood", "vegetarian"] as const).map((val) => {
-        const label = val === "all" ? "All Protein" : val === "poultry" ? "Poultry" : val === "red-meat" ? "Red Meat" : val === "pork" ? "Pork" : val === "fish-seafood" ? "Fish & Seafood" : "Veg / Vegan";
-        const active = activeProtein === val;
-        return (
-          <button
-            key={val}
-            type="button"
-            onClick={() => setActiveProtein(val)}
-            className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition
-              ${active ? "bg-[#1d1d1f] text-white" : "bg-white text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:ring-[#c7c7cc]"}`}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  </div>
+  {!filtersCollapsed && (
+    <>
+      {/* Row 1: Search + Moods */}
+      <div className="mt-4 flex flex-wrap gap-2 lg:mt-3 lg:flex-nowrap">
+        <div className="w-full lg:flex-1">
+          <SearchBar value={search} onChange={setSearch} />
+        </div>
+        <select
+          value={activeVibe}
+          onChange={(e) => setActiveVibe(e.target.value)}
+          className="w-[calc(50%-4px)] lg:w-auto rounded-xl border border-[#e5e5ea] bg-white px-3 py-2 text-sm text-[#1d1d1f] shadow-sm appearance-none pr-8 cursor-pointer"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+        >
+          <option value="all">All Moods</option>
+          <option value="light-fresh">🌿 Light &amp; Fresh</option>
+          <option value="all-weather">☁️ All-Weather</option>
+          <option value="heavy-rich">🍲 Heavy &amp; Rich</option>
+        </select>
+      </div>
 
-  {/* Row 3: Label pills */}
-  {labels.length > 0 && (
-    <div className="mt-3">
-      <TagFilter
-        categories={labelFilterOptions.map(
-          (id) => labelFilterLabels[id as keyof typeof labelFilterLabels] ?? id,
-        )}
-        activeCategory={
-          activeLabelId === "all"
-            ? "All labels"
-            : (labels.find((l) => l.id === activeLabelId)?.name ?? "")
-        }
-        onSelect={(name) => {
-          if (name === "All labels") setActiveLabelId("all");
-          else {
-            const label = labels.find((l) => l.name === name);
-            if (label) setActiveLabelId(label.id);
-          }
-        }}
-      />
-    </div>
+      {/* Row 2: Protein pills */}
+      <div className="mt-3 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {(["all", "poultry", "red-meat", "pork", "fish-seafood", "vegetarian"] as const).map((val) => {
+            const label = val === "all" ? "All Protein" : val === "poultry" ? "Poultry" : val === "red-meat" ? "Red Meat" : val === "pork" ? "Pork" : val === "fish-seafood" ? "Fish & Seafood" : "Veg / Vegan";
+            const active = activeProtein === val;
+            return (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setActiveProtein(val)}
+                className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition
+                  ${active ? "bg-[#1d1d1f] text-white" : "bg-white text-[#1d1d1f] ring-1 ring-[#e5e5ea] hover:ring-[#c7c7cc]"}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Row 3: Label pills */}
+      {labels.length > 0 && (
+        <div className="mt-3">
+          <TagFilter
+            categories={labelFilterOptions.map(
+              (id) => labelFilterLabels[id as keyof typeof labelFilterLabels] ?? id,
+            )}
+            activeCategory={
+              activeLabelId === "all"
+                ? "All labels"
+                : (labels.find((l) => l.id === activeLabelId)?.name ?? "")
+            }
+            onSelect={(name) => {
+              if (name === "All labels") setActiveLabelId("all");
+              else {
+                const label = labels.find((l) => l.name === name);
+                if (label) setActiveLabelId(label.id);
+              }
+            }}
+          />
+        </div>
+      )}
+    </>
   )}
 </header>
 

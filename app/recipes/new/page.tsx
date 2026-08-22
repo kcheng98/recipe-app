@@ -31,7 +31,11 @@ export default function NewRecipePage() {
       title: draft.title.trim(),
       description: draft.description.trim() || draft.title.trim(),
     });
-    router.push(`/recipes/${recipe.id}`);
+    // router.replace(), not push — this page is a single history entry, so
+    // replacing it with the new recipe's detail page means "← Recipes" goes
+    // straight back to Home, instead of landing back on this Add-recipe
+    // screen for a recipe that's already been saved.
+    router.replace(`/recipes/${recipe.id}`);
   }
 
   return (
