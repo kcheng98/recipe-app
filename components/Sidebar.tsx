@@ -35,6 +35,7 @@ export default function Sidebar({
 
   const isPlannerActive = pathname === "/planner";
   const isWrappedActive = pathname === "/wrapped";
+  const isNutritionActive = pathname === "/nutrition";
 
   return (
     <>
@@ -65,13 +66,14 @@ export default function Sidebar({
           </p>
           <ul className="space-y-0.5">
             {allFolders.map((folder) => {
-              const isActive = !isPlannerActive && !isWrappedActive && folder.id === activeFolder;
+              const isActive =
+                !isPlannerActive && !isWrappedActive && !isNutritionActive && folder.id === activeFolder;
               return (
                 <li key={folder.id}>
                   <button
                     type="button"
                     onClick={() => {
-                      if (isPlannerActive || isWrappedActive) {
+                      if (isPlannerActive || isWrappedActive || isNutritionActive) {
                         window.location.href = folder.id === ALL_FOLDER_ID ? "/" : `/?folder=${folder.id}`;
                       } else {
                         onFolderSelect(folder.id);
@@ -130,6 +132,20 @@ export default function Sidebar({
               >
                 <span className="text-lg">🎁</span>
                 <span className="truncate">Kitchen Wrapped</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/nutrition"
+                onClick={onClose}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[15px] transition ${
+                  isNutritionActive
+                    ? "bg-[#e8f2fc] font-medium text-[#0071e3]"
+                    : "text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                }`}
+              >
+                <span className="text-lg">🥩</span>
+                <span className="truncate">Protein Math</span>
               </Link>
             </li>
             <li>

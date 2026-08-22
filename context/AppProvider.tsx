@@ -24,6 +24,7 @@ import type {
   Label,
   MealPlan,
   MealSlot,
+  NutritionConfig,
   PlannerConfig,
   Recipe,
   RecipeDraft,
@@ -54,6 +55,11 @@ type AppContextValue = {
   mealPlan: MealPlan | null;
   /** Every cook ever logged, oldest first. Powers Kitchen Wrapped. */
   cookLog: CookEvent[];
+
+  // ── Protein Math state ────────────────────────────────────────────────────
+  nutrition: NutritionConfig;
+  setNutritionConfig: (config: NutritionConfig) => void;
+
   /**
    * Slots from past weeks whose status is still "pending" — the user hasn't
    * confirmed or skipped them yet. The CookConfirmIntercept component drains
@@ -499,6 +505,15 @@ return () => {
     [persistAndSync],
   );
 
+  // ─── Protein Math actions ─────────────────────────────────────────────────
+
+  const setNutritionConfig = useCallback(
+    (config: NutritionConfig) => {
+      persistAndSync((prev) => ({ ...prev, nutrition: config }));
+    },
+    [persistAndSync],
+  );
+
   // ─── Planner actions ──────────────────────────────────────────────────────
 
   const setPlannerConfig = useCallback(
@@ -820,6 +835,8 @@ return () => {
       plannerConfig: data.plannerConfig,
       mealPlan: data.mealPlan,
       cookLog: data.cookLog,
+      nutrition: data.nutrition,
+      setNutritionConfig,
       pendingConfirmations,
       addRecipe,
       updateRecipeById,
@@ -847,6 +864,7 @@ return () => {
       user,
       syncStatus,
       cloudEnabled,
+      setNutritionConfig,
       pendingConfirmations,
       addRecipe,
       updateRecipeById,

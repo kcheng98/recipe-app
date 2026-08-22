@@ -55,6 +55,8 @@ export type AppData = {
   // carries its single most recent lastCookedAt — this is the record of
   // every time, so month/year stats can be reconstructed later.
   cookLog: CookEvent[];
+  // Protein Math workspace settings — see the "Protein Math" section below.
+  nutrition: NutritionConfig;
 };
 
 export type RecipeDraft = Omit<Recipe, "id" | "createdAt" | "updatedAt">;
@@ -169,4 +171,56 @@ export type CookEvent = {
   proteinType: ProteinType;
   /** ISO timestamp — the date being credited for this cook. */
   cookedAt: string;
+};
+
+// ─── Protein Math ─────────────────────────────────────────────────────────────
+
+/** Whether a protein source's grams-per-100g figure was measured raw or cooked. */
+export type ProteinBasis = "raw" | "cooked";
+
+/**
+ * Mirrors the app's existing protein categories (poultry, red meat, pork,
+ * fish & seafood, vegetarian — the same groupings used for recipes and
+ * Kitchen Wrapped), minus vegan/none, since this workspace is specifically
+ * about converting a protein target into grams of a specific food to buy or prep.
+ */
+export type ProteinSourceCategory =
+  | "poultry"
+  | "red-meat"
+  | "pork"
+  | "fish-seafood"
+  | "vegetarian";
+
+/**
+ * One protein/meat reference entry — e.g. "Chicken Breast" at 23g protein
+ * per 100g raw. `proteinPer100g` and `basis` are per-entry, not a single
+ * app-wide assumption, since a real household reference list is often a mix
+ * of raw-weight and already-cooked figures.
+ */
+export type ProteinSource = {
+  id: string;
+  name: string;
+  category: ProteinSourceCategory;
+  proteinPer100g: number;
+  basis: ProteinBasis;
+  /** Free-text caveats, e.g. "Bone-in — roughly 50% cooked yield." */
+  notes: string;
+};
+
+/** One household member's inputs for their daily protein target. */
+export type NutritionPerson = {
+  name: string;
+  weightKg: number;
+  /** Grams of protein targeted per kg of body weight per day. */
+  gramsPerKg: number;
+};
+
+/**
+ * Settings for the Protein Math workspace. Fixed to two people (built around
+ * a couple, not a general household size) and a fixed 2-meals/day
+ * (lunch + dinner) 50/50 split.
+ */
+export type NutritionConfig = {
+  people: [NutritionPerson, NutritionPerson];
+  proteins: ProteinSource[];
 };

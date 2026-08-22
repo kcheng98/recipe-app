@@ -16,6 +16,7 @@ function buildExportPayload(app: {
   plannerConfig: unknown;
   mealPlan: unknown;
   cookLog: unknown;
+  nutrition: unknown;
 }) {
   return {
     exportedAt: new Date().toISOString(),
@@ -26,6 +27,7 @@ function buildExportPayload(app: {
     plannerConfig: app.plannerConfig,
     mealPlan: app.mealPlan,
     cookLog: app.cookLog,
+    nutrition: app.nutrition,
   };
 }
 
@@ -45,7 +47,7 @@ function downloadJson(payload: unknown, filename: string) {
 
 function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
   const router = useRouter();
-  const { recipes, labels, folders, plannerConfig, mealPlan, cookLog, syncStatus } = useApp();
+  const { recipes, labels, folders, plannerConfig, mealPlan, cookLog, nutrition, syncStatus } = useApp();
   const [lastExportedAt, setLastExportedAt] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -63,7 +65,7 @@ function AccountSettings({ userEmail }: { userEmail: string | undefined }) {
   const shouldNudge = daysSinceExport === null || daysSinceExport >= EXPORT_REMINDER_DAYS;
 
   function handleExport() {
-    const payload = buildExportPayload({ recipes, labels, folders, plannerConfig, mealPlan, cookLog });
+    const payload = buildExportPayload({ recipes, labels, folders, plannerConfig, mealPlan, cookLog, nutrition });
     const stamp = new Date().toISOString().slice(0, 10);
     downloadJson(payload, `kitchen-library-export-${stamp}.json`);
     try {

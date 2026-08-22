@@ -1,4 +1,4 @@
-import { defaultAppData, normalizePlannerConfig } from "@/lib/defaults";
+import { defaultAppData, normalizeNutritionConfig, normalizePlannerConfig } from "@/lib/defaults";
 import type { AppData } from "@/lib/types";
 import { getSupabase } from "./client";
 
@@ -164,5 +164,7 @@ function normalizeAppData(raw: AppData): AppData {
     mealPlan: raw.mealPlan ?? null,
     // ── Kitchen Wrapped ── (missing entirely for data saved before this shipped)
     cookLog: raw.cookLog ?? defaultAppData.cookLog,
+    // ── Protein Math ── (missing entirely for data saved before this shipped)
+    nutrition: normalizeNutritionConfig(raw.nutrition),
   };
 }
