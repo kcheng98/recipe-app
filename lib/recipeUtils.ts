@@ -112,6 +112,47 @@ export function createCookEvent(recipe: Recipe, cookedAt: string): CookEvent {
   };
 }
 
+/**
+ * Appends a cook event, but only if this recipe doesn't already have one
+ * logged for the same calendar day. This is the guard against duplicate
+ * entries — re-picking the same date in the inline editor (browsers can
+ * fire onChange even when the value didn't actually change), a retried
+ * save, or re-confirming an already-cooked planner slot should never
+ * inflate Kitchen Wrapped's count. One real dinner = at most one log entry
+ * per recipe per day.
+ */
+export function appendCookEventIfNew(
+  cookLog: CookEvent[],
+  recipe: Recipe,
+  cookedAt: string,
+): CookEvent[] {
+  const dateKey = cookedAt.slice(0, 10);
+  const alreadyLogged = cookLog.some(
+    (e) => e.recipeId === recipe.id && e.cookedAt.slice(0, 10) === dateKey,
+  );
+  if (alreadyLogged) return cookLog;
+  return [...cookLog, createCookEvent(recipe, cookedAt)];
+}
+
+/**
+ * Removes any cook-log entries for a recipe that land on the given date.
+ * Used when a "last cooked" date is cleared back to "Never" — undoes the
+ * log entry (or entries, if the duplicate-logging bug already created more
+ * than one) that corresponded to the date being cleared, so a mistaken or
+ * test entry doesn't permanently inflate Kitchen Wrapped.
+ */
+export function removeCookEventsForDate(
+  cookLog: CookEvent[],
+  recipeId: string,
+  dateISO: string | null | undefined,
+): CookEvent[] {
+  if (!dateISO) return cookLog;
+  const dateKey = dateISO.slice(0, 10);
+  return cookLog.filter(
+    (e) => !(e.recipeId === recipeId && e.cookedAt.slice(0, 10) === dateKey),
+  );
+}
+
 export async function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

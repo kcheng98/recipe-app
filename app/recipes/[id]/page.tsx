@@ -66,6 +66,15 @@ export default function CookModePage() {
     setEditingLastCooked(false);
   };
 
+  // A standalone "Clear" control, separate from the date input above — the
+  // browser's own clear/X affordance on <input type="date"> only shows up
+  // reliably on desktop, not on phone. This works the same everywhere.
+  const handleClearLastCooked = () => {
+    const { id: _id, createdAt: _c, updatedAt: _u, ...draft } = recipe;
+    updateRecipeById(recipe.id, { ...draft, lastCookedAt: null });
+    setEditingLastCooked(false);
+  };
+
   // Format lastCookedAt ISO → "May 19, 2026" for display
   const lastCookedDisplay = recipe.lastCookedAt
     ? new Date(recipe.lastCookedAt).toLocaleDateString("en-US", {
@@ -153,6 +162,17 @@ export default function CookModePage() {
                 </svg>
               </button>
             )}
+            {/* Always-visible clear control — works the same on phone as on
+                desktop, unlike the native date input's own clear icon. */}
+            {!editingLastCooked && recipe.lastCookedAt ? (
+              <button
+                type="button"
+                onClick={handleClearLastCooked}
+                className="text-xs text-[#86868b] underline hover:text-[#0071e3]"
+              >
+                Clear
+              </button>
+            ) : null}
           </span>
         </div>
 

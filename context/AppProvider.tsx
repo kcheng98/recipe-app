@@ -28,7 +28,12 @@ import type {
   Recipe,
   RecipeDraft,
 } from "@/lib/types";
-import { createCookEvent, createRecipe, updateRecipe } from "@/lib/recipeUtils";
+import {
+  appendCookEventIfNew,
+  createRecipe,
+  removeCookEventsForDate,
+  updateRecipe,
+} from "@/lib/recipeUtils";
 import { generatePlan, scoreRecipe, weightedSample } from "@/lib/planner/algorithm";
 import type { User } from "@supabase/supabase-js";
 
@@ -358,17 +363,25 @@ return () => {
             }
           : prev.mealPlan;
 
-        // Kitchen Wrapped: log a cook event whenever this save actually
-        // changed lastCookedAt to a new, non-null value — covers both the
-        // full edit form and the inline "last cooked" date editor on the
-        // recipe page. A save that leaves lastCookedAt untouched (the
-        // common case — editing ingredients, etc.) logs nothing.
-        const shouldLogCook =
-          updatedRecipe?.lastCookedAt != null &&
-          updatedRecipe.lastCookedAt !== prevRecipe?.lastCookedAt;
-        const updatedCookLog = shouldLogCook
-          ? [...prev.cookLog, createCookEvent(updatedRecipe, updatedRecipe.lastCookedAt as string)]
-          : prev.cookLog;
+        // Kitchen Wrapped: keep cookLog in sync with lastCookedAt edits.
+        // Compared by calendar day, not exact instant — re-picking the same
+        // date (browsers can fire onChange even when the value didn't
+        // actually change) or re-saving the form never adds a duplicate
+        // entry for a day already logged. Clearing the date back to "Never"
+        // removes whatever entry was logged for the day being cleared, so
+        // a mistaken or test edit doesn't leave a permanent phantom cook.
+        const prevDateKey = prevRecipe?.lastCookedAt?.slice(0, 10) ?? null;
+        const newDateKey = updatedRecipe?.lastCookedAt?.slice(0, 10) ?? null;
+        let updatedCookLog = prev.cookLog;
+        if (newDateKey && newDateKey !== prevDateKey && updatedRecipe) {
+          updatedCookLog = appendCookEventIfNew(
+            updatedCookLog,
+            updatedRecipe,
+            updatedRecipe.lastCookedAt as string,
+          );
+        } else if (!newDateKey && prevDateKey) {
+          updatedCookLog = removeCookEventsForDate(updatedCookLog, id, prevRecipe?.lastCookedAt);
+        }
 
         return { ...prev, recipes: updatedRecipes, mealPlan: updatedMealPlan, cookLog: updatedCookLog };
       });
@@ -610,12 +623,13 @@ return () => {
               )
             : prev.recipes;
 
-        // Kitchen Wrapped: log the cook
+        // Kitchen Wrapped: log the cook (deduped per recipe+day — re-confirming
+        // an already-cooked slot never adds a second entry for that date)
         const cookedRecipe = cooked && slot?.recipeId
           ? updatedRecipes.find((r) => r.id === slot.recipeId)
           : undefined;
         const updatedCookLog = cookedRecipe
-          ? [...prev.cookLog, createCookEvent(cookedRecipe, cookedAt)]
+          ? appendCookEventIfNew(prev.cookLog, cookedRecipe, cookedAt)
           : prev.cookLog;
 
         return {
@@ -753,11 +767,11 @@ return () => {
             : r,
         );
 
-        // Kitchen Wrapped: this always represents a real, telemetry-confirmed
-        // cook, so it always logs an event.
+        // Kitchen Wrapped: this represents a real, telemetry-confirmed cook —
+        // deduped per recipe+day, same as everywhere else lastCookedAt is set.
         const cookedRecipe = updatedRecipes.find((r) => r.id === recipeId);
         const updatedCookLog = cookedRecipe
-          ? [...prev.cookLog, createCookEvent(cookedRecipe, cookedAt)]
+          ? appendCookEventIfNew(prev.cookLog, cookedRecipe, cookedAt)
           : prev.cookLog;
 
         // Upsert the slot as cooked
