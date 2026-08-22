@@ -27,14 +27,12 @@ const defaultProteinSources: ProteinSource[] = [
   { id: "protein-chicken-thighs-bisk", name: "Chicken Thighs (Bone-In, Skin-On)", category: "poultry", proteinPer100g: 13, basis: "raw", notes: "Bone + skin weight lowers protein density — expect a bigger raw weight to hit target." },
   { id: "protein-rotisserie-chicken", name: "Rotisserie Chicken", category: "poultry", proteinPer100g: 27, basis: "cooked", notes: "Already cooked — this is a serving weight, not a raw/shopping weight." },
   { id: "protein-ground-chicken-turkey", name: "Ground Chicken / Turkey (93/7)", category: "poultry", proteinPer100g: 22, basis: "raw", notes: "" },
-  { id: "protein-other-poultry", name: "All Other Poultry (Catch-All Avg)", category: "poultry", proteinPer100g: 21, basis: "raw", notes: "Average of the other poultry entries above." },
 
   // Pork
   { id: "protein-pork-tenderloin", name: "Pork Tenderloin", category: "pork", proteinPer100g: 22, basis: "raw", notes: "" },
   { id: "protein-pork-belly", name: "Pork Belly", category: "pork", proteinPer100g: 10, basis: "raw", notes: "High fat content — much lower protein density than leaner cuts." },
   { id: "protein-st-louis-ribs", name: "St. Louis Ribs (Bone-In)", category: "pork", proteinPer100g: 10, basis: "raw", notes: "Bone weight lowers protein density — expect a bigger raw weight to hit target." },
   { id: "protein-ground-pork", name: "Ground Pork", category: "pork", proteinPer100g: 20, basis: "raw", notes: "" },
-  { id: "protein-other-pork", name: "All Other Pork (Catch-All Avg)", category: "pork", proteinPer100g: 18, basis: "raw", notes: "Average of the other pork entries above." },
 
   // Red meat
   { id: "protein-beef-tenderloin", name: "Beef Tenderloin / Filet", category: "red-meat", proteinPer100g: 22, basis: "raw", notes: "" },
@@ -43,14 +41,12 @@ const defaultProteinSources: ProteinSource[] = [
   { id: "protein-ground-beef", name: "Ground Beef (80/20)", category: "red-meat", proteinPer100g: 19, basis: "raw", notes: "" },
   { id: "protein-braised-beef-shank", name: "Braised Banana Beef Shank", category: "red-meat", proteinPer100g: 30, basis: "cooked", notes: "Already cooked — this is a serving weight, not a raw/shopping weight." },
   { id: "protein-rack-of-lamb", name: "Rack of Lamb (Bone-In)", category: "red-meat", proteinPer100g: 11, basis: "raw", notes: "Bone weight lowers protein density — expect a bigger raw weight to hit target." },
-  { id: "protein-other-red-meat", name: "All Other Beef / Lamb (Catch-All Avg)", category: "red-meat", proteinPer100g: 20, basis: "raw", notes: "Average of the other beef/lamb entries above." },
 
   // Fish & seafood
   { id: "protein-shrimp", name: "Shrimp (Peeled & Deveined)", category: "fish-seafood", proteinPer100g: 23, basis: "raw", notes: "" },
   { id: "protein-salmon", name: "Salmon Fillet", category: "fish-seafood", proteinPer100g: 20, basis: "raw", notes: "" },
   { id: "protein-cod", name: "Cod Fillet", category: "fish-seafood", proteinPer100g: 20, basis: "raw", notes: "" },
   { id: "protein-ahi-tuna", name: "Ahi Tuna Steak", category: "fish-seafood", proteinPer100g: 24, basis: "raw", notes: "" },
-  { id: "protein-other-fish", name: "All Other Fish / Seafood (Catch-All Avg)", category: "fish-seafood", proteinPer100g: 20, basis: "raw", notes: "Average of the other fish/seafood entries above." },
 
   // Vegetarian
   { id: "protein-tofu", name: "Extra Firm Tofu", category: "vegetarian", proteinPer100g: 10, basis: "raw", notes: "" },
