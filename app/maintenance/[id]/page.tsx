@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import MaintenanceTopBar from "@/components/maintenance/MaintenanceTopBar";
 import MarkDoneDialog from "@/components/maintenance/MarkDoneDialog";
 import ConfirmDialog from "@/components/maintenance/ConfirmDialog";
+import ItemFormModal from "@/components/maintenance/ItemFormModal";
 import { useMaintenance } from "@/context/MaintenanceProvider";
 import { computeStatus, statusLabel } from "@/lib/maintenance/status";
 import type { MaintenanceHistoryEntry } from "@/lib/maintenance/types";
@@ -38,6 +40,7 @@ export default function MaintenanceItemDetailPage() {
   const item = items.find((it) => it.id === id);
 
   const [markDoneOpen, setMarkDoneOpen] = useState(false);
+  const [editItemOpen, setEditItemOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<MaintenanceHistoryEntry | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const [deleteItemOpen, setDeleteItemOpen] = useState(false);
@@ -63,6 +66,10 @@ export default function MaintenanceItemDetailPage() {
       <MaintenanceTopBar />
 
       <div className="flex flex-1 flex-col gap-6 px-4 py-6 sm:px-7">
+        <Link href="/maintenance" className="text-sm text-[#0071e3] hover:underline">
+          ← Back to Maintenance
+        </Link>
+
         <div className="flex items-start justify-between">
           <div>
             <div className="text-[22px] font-bold text-[#1d1d1f]">{item.name}</div>
@@ -79,6 +86,16 @@ export default function MaintenanceItemDetailPage() {
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-11 z-10 w-44 overflow-hidden rounded-xl border border-[#e5e5ea] bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setEditItemOpen(true);
+                  }}
+                  className="w-full px-4 py-3 text-left text-[14px] text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                >
+                  Edit item
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -172,6 +189,8 @@ export default function MaintenanceItemDetailPage() {
           onClose={() => setMarkDoneOpen(false)}
         />
       )}
+
+      {editItemOpen && <ItemFormModal item={item} onClose={() => setEditItemOpen(false)} />}
 
       {editingEntry && (
         <MarkDoneDialog

@@ -51,6 +51,8 @@ type MaintenanceContextValue = {
   addItem: (draft: MaintenanceItemDraft) => MaintenanceItem;
   updateItem: (id: string, draft: MaintenanceItemDraft) => void;
   deleteItem: (id: string) => void;
+  /** Applies a new manual drag-reorder position to every item, in the given order. */
+  reorderItems: (orderedIds: string[]) => void;
 
   /** Appends a new history entry (mark-done) and recomputes lastDoneDate. */
   logDone: (itemId: string, date: string, note?: string) => void;
@@ -329,17 +331,22 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
       const history = draft.lastDoneDate
         ? [{ id: createId(), date: draft.lastDoneDate }]
         : [];
-      const item: MaintenanceItem = {
-        id: createId(),
-        name: draft.name.trim(),
-        category: draft.category?.trim() || undefined,
-        intervalDays: draft.intervalDays,
-        lastDoneDate: recalculateLastDone(history),
-        history,
-        notes: draft.notes?.trim() || undefined,
-      };
-      persistAndSync((prev) => ({ items: [item, ...prev.items] }));
-      return item;
+      let created!: MaintenanceItem;
+      persistAndSync((prev) => {
+        const maxOrder = prev.items.reduce((max, it) => Math.max(max, it.order ?? 0), -1);
+        created = {
+          id: createId(),
+          name: draft.name.trim(),
+          category: draft.category?.trim() || undefined,
+          intervalDays: draft.intervalDays,
+          lastDoneDate: recalculateLastDone(history),
+          history,
+          notes: draft.notes?.trim() || undefined,
+          order: maxOrder + 1,
+        };
+        return { items: [created, ...prev.items] };
+      });
+      return created;
     },
     [persistAndSync],
   );
@@ -359,6 +366,20 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
             : it,
         ),
       }));
+    },
+    [persistAndSync],
+  );
+
+  const reorderItems = useCallback(
+    (orderedIds: string[]) => {
+      persistAndSync((prev) => {
+        const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+        return {
+          items: prev.items.map((it) =>
+            orderMap.has(it.id) ? { ...it, order: orderMap.get(it.id)! } : it,
+          ),
+        };
+      });
     },
     [persistAndSync],
   );
@@ -424,6 +445,7 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
         addItem,
         updateItem,
         deleteItem,
+        reorderItems,
         logDone,
         updateHistoryEntry,
         deleteHistoryEntry,

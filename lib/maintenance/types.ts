@@ -26,6 +26,8 @@ export type MaintenanceItem = {
   /** Newest-first is a display concern, not a storage concern — kept in insertion order here. */
   history: MaintenanceHistoryEntry[];
   notes?: string;
+  /** Manual drag-reorder position, scoped within the item's category group — lower sorts first. */
+  order: number;
 };
 
 export type MaintenanceData = {

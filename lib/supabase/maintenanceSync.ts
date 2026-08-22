@@ -6,7 +6,13 @@ const TABLE = "maintenance_library";
 const EMPTY_DATA: MaintenanceData = { items: [] };
 
 function normalizeMaintenanceData(raw: Partial<MaintenanceData> | null | undefined): MaintenanceData {
-  return { items: raw?.items ?? [] };
+  const items = raw?.items ?? [];
+  return {
+    items: items.map((item, index) => ({
+      ...item,
+      order: typeof item.order === "number" ? item.order : index,
+    })),
+  };
 }
 
 /**

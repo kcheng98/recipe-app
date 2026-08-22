@@ -4,19 +4,25 @@ import { useState } from "react";
 import Modal from "./Modal";
 import { todayISO } from "@/lib/maintenance/status";
 import { useMaintenance } from "@/context/MaintenanceProvider";
-import type { MaintenanceItemDraft } from "@/lib/maintenance/types";
+import type { MaintenanceItem, MaintenanceItemDraft } from "@/lib/maintenance/types";
 
-type AddItemModalProps = {
+type ItemFormModalProps = {
+  /** Pass the item being edited; omit (or leave undefined) to add a new item. */
+  item?: MaintenanceItem;
   onClose: () => void;
 };
 
-export default function AddItemModal({ onClose }: AddItemModalProps) {
-  const { items, addItem } = useMaintenance();
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [interval, setInterval] = useState("");
-  const [lastDone, setLastDone] = useState("");
-  const [notes, setNotes] = useState("");
+export default function ItemFormModal({ item, onClose }: ItemFormModalProps) {
+  const { items, addItem, updateItem } = useMaintenance();
+  const isEditing = Boolean(item);
+
+  const [name, setName] = useState(item?.name ?? "");
+  const [category, setCategory] = useState(item?.category ?? "");
+  const [interval, setInterval] = useState(
+    item?.intervalDays != null ? String(item.intervalDays) : "",
+  );
+  const [lastDone, setLastDone] = useState(item?.lastDoneDate ?? "");
+  const [notes, setNotes] = useState(item?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const categoryOptions = Array.from(
@@ -42,19 +48,29 @@ export default function AddItemModal({ onClose }: AddItemModalProps) {
       return;
     }
 
-    const draft: MaintenanceItemDraft = {
-      name,
-      category: category || undefined,
-      intervalDays,
-      lastDoneDate: lastDone || null,
-      notes: notes || undefined,
-    };
-    addItem(draft);
+    if (isEditing && item) {
+      const draft: MaintenanceItemDraft = {
+        name,
+        category: category || undefined,
+        intervalDays,
+        notes: notes || undefined,
+      };
+      updateItem(item.id, draft);
+    } else {
+      const draft: MaintenanceItemDraft = {
+        name,
+        category: category || undefined,
+        intervalDays,
+        lastDoneDate: lastDone || null,
+        notes: notes || undefined,
+      };
+      addItem(draft);
+    }
     onClose();
   }
 
   return (
-    <Modal title="Add item" onClose={onClose}>
+    <Modal title={isEditing ? "Edit item" : "Add item"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (
           <div className="rounded-xl bg-red-50 px-4 py-2.5 text-[13px] text-red-600">{error}</div>
@@ -98,18 +114,25 @@ export default function AddItemModal({ onClose }: AddItemModalProps) {
             placeholder="Blank = as-needed"
             className="rounded-xl border border-[#e5e5ea] px-3.5 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20"
           />
+          {isEditing && (
+            <span className="text-[11px] text-[#86868b]">
+              Changing this applies going forward — your logged history stays as-is.
+            </span>
+          )}
         </label>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium text-[#515154]">Last done on (optional)</span>
-          <input
-            type="date"
-            max={today}
-            value={lastDone}
-            onChange={(e) => setLastDone(e.target.value)}
-            className="rounded-xl border border-[#e5e5ea] px-3.5 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20"
-          />
-        </label>
+        {!isEditing && (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-medium text-[#515154]">Last done on (optional)</span>
+            <input
+              type="date"
+              max={today}
+              value={lastDone}
+              onChange={(e) => setLastDone(e.target.value)}
+              className="rounded-xl border border-[#e5e5ea] px-3.5 py-2.5 text-[15px] text-[#1d1d1f] outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20"
+            />
+          </label>
+        )}
 
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] font-medium text-[#515154]">Notes (optional)</span>
@@ -133,7 +156,7 @@ export default function AddItemModal({ onClose }: AddItemModalProps) {
             type="submit"
             className="flex-1 rounded-xl bg-[#0071e3] py-3 text-[15px] font-semibold text-white"
           >
-            Add item
+            {isEditing ? "Save changes" : "Add item"}
           </button>
         </div>
       </form>
