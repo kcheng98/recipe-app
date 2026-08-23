@@ -59,6 +59,28 @@ export function statusLabel(item: MaintenanceItem, today: string = todayISO()): 
   return `due in ${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`;
 }
 
+/** e.g. "Aug 22" — short month + day, no year (this year is implied). */
+function formatDateShort(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/**
+ * Same status logic as statusLabel, but names the actual due date instead of
+ * a relative "in N days" count — easier to scan at a glance on the dashboard.
+ */
+export function dueDateLabel(item: MaintenanceItem, today: string = todayISO()): string {
+  const status = computeStatus(item, today);
+  if (status === "as-needed") return "as needed";
+  if (status === "not-logged") return "not yet logged";
+
+  const dueDate = addDays(item.lastDoneDate!, item.intervalDays!);
+  if (status === "overdue") return `overdue since ${formatDateShort(dueDate)}`;
+  if (dueDate === today) return "due today";
+  return `due ${formatDateShort(dueDate)}`;
+}
+
 const STATUS_RANK: Record<MaintenanceStatus, number> = {
   overdue: 0,
   "due-soon": 1,

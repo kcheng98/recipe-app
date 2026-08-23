@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { MaintenanceItem } from "@/lib/maintenance/types";
-import { computeStatus, statusLabel } from "@/lib/maintenance/status";
+import { computeStatus, dueDateLabel } from "@/lib/maintenance/status";
 
 const STATUS_COLOR: Record<string, string> = {
   overdue: "#ff3b30",
@@ -35,12 +35,12 @@ export default function ItemRow({ item, draggable }: { item: MaintenanceItem; dr
     <div
       ref={draggable ? setNodeRef : undefined}
       style={style}
-      className="flex items-center gap-2 border-b border-[#f0f0f2] px-5 py-3.5 last:border-b-0 hover:bg-[#f5f5f7] sm:px-6"
+      className="flex items-start gap-2 border-b border-[#f0f0f2] px-5 py-3.5 last:border-b-0 hover:bg-[#f5f5f7] sm:px-6"
     >
       {draggable && (
         <button
           type="button"
-          className="flex-shrink-0 cursor-grab touch-none px-1 py-1 text-[#c7c7cc] active:cursor-grabbing"
+          className="mt-0.5 flex-shrink-0 cursor-grab touch-none px-1 py-1 text-[#c7c7cc] active:cursor-grabbing"
           aria-label="Drag to reorder"
           {...attributes}
           {...listeners}
@@ -48,20 +48,20 @@ export default function ItemRow({ item, draggable }: { item: MaintenanceItem; dr
           ⠿
         </button>
       )}
-      <Link href={`/maintenance/${item.id}`} className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: color }} />
+      <Link href={`/maintenance/${item.id}`} className="flex min-w-0 flex-1 items-start gap-3">
+        <div className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium text-[#1d1d1f]">{item.name}</div>
-          <div className="truncate text-xs text-[#86868b]">
-            {item.lastDoneDate
-              ? `Last done ${item.lastDoneDate}`
-              : "Never logged"}
+          <div className="break-words text-[15px] font-medium leading-snug text-[#1d1d1f]">
+            {item.name}
+          </div>
+          <div className="mt-0.5 text-xs text-[#86868b]">
+            {item.lastDoneDate ? `Last done ${item.lastDoneDate}` : "Never logged"}
             {item.intervalDays !== null ? ` · every ${item.intervalDays} days` : " · as needed"}
           </div>
+          <div className="mt-1 text-xs font-semibold" style={{ color }}>
+            {dueDateLabel(item)}
+          </div>
         </div>
-        <span className="flex-shrink-0 text-xs font-semibold" style={{ color }}>
-          {statusLabel(item)}
-        </span>
       </Link>
     </div>
   );

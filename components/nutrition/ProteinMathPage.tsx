@@ -126,18 +126,33 @@ function ProteinRow({
   const aGrams = gramsNeededPerMeal(personA, source);
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_72px_72px_72px] items-center gap-2 border-b border-[#f2f2f4] py-2.5 last:border-none">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-sm text-[#1d1d1f]">{source.name}</span>
+    <div className="border-b border-[#f2f2f4] py-2.5 last:border-none">
+      <div className="flex items-start gap-1.5">
+        <span className="break-words text-sm leading-snug text-[#1d1d1f]">{source.name}</span>
         {source.basis === "cooked" && (
-          <span className="shrink-0 rounded bg-[#f2f2f4] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
+          <span className="mt-0.5 shrink-0 rounded bg-[#f2f2f4] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
             Cooked
           </span>
         )}
       </div>
-      <span className="text-right text-sm font-bold text-[#0071e3]">{formatGrams(combined)}</span>
-      <span className="text-right text-[13px] text-[#1d1d1f]">{formatGrams(bGrams)}</span>
-      <span className="text-right text-[13px] text-[#1d1d1f]">{formatGrams(aGrams)}</span>
+      <div className="mt-1.5 grid grid-cols-3 gap-2">
+        <div>
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-[#86868b]">Combined/day</div>
+          <div className="text-sm font-bold text-[#0071e3]">{formatGrams(combined)}</div>
+        </div>
+        <div>
+          <div className="truncate text-[9px] font-semibold uppercase tracking-wide text-[#86868b]">
+            {personB.name}/meal
+          </div>
+          <div className="text-[13px] text-[#1d1d1f]">{formatGrams(bGrams)}</div>
+        </div>
+        <div>
+          <div className="truncate text-[9px] font-semibold uppercase tracking-wide text-[#86868b]">
+            {personA.name}/meal
+          </div>
+          <div className="text-[13px] text-[#1d1d1f]">{formatGrams(aGrams)}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -237,20 +252,6 @@ export default function ProteinMathPage() {
                   </button>
                   {isOpen && (
                     <div className="px-5 pb-3.5">
-                      <div className="grid grid-cols-[minmax(0,1fr)_72px_72px_72px] gap-2 border-b border-[#e5e5ea] pb-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
-                          Protein
-                        </span>
-                        <span className="text-right text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
-                          Combined/day
-                        </span>
-                        <span className="text-right text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
-                          {personB.name}/meal
-                        </span>
-                        <span className="text-right text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
-                          {personA.name}/meal
-                        </span>
-                      </div>
                       {items.map((source) => (
                         <ProteinRow key={source.id} source={source} people={people} />
                       ))}
