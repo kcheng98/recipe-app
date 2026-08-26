@@ -21,7 +21,7 @@
  * import is confirmed to have worked.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/context/AppProvider";
 import { draftFromImport } from "@/lib/recipeUtils";
 import type { ImportedRecipe } from "@/lib/types";
@@ -53,12 +53,36 @@ function splitIntoBatches<T>(items: T[], batchCount: number): T[][] {
 }
 
 export default function BulkImportPage() {
-  const { ready, user, addRecipe, folders, recipes: existingRecipes } = useApp();
+  const { ready, user, addRecipe, folders, recipes: existingRecipes, syncStatus } = useApp();
   const [allRecipes, setAllRecipes] = useState<BulkRecipe[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [rows, setRows] = useState<Record<string, RowStatus>>({});
   const [running, setRunning] = useState(false);
   const [batchesRun, setBatchesRun] = useState(0);
+
+  // addRecipe fires an async, unqueued write to Supabase, guarded by a
+  // version check. Firing the next addRecipe before the previous one's
+  // write actually confirms races that version check — the second write
+  // collides, the app resolves it as a "conflict" and pulls down the cloud
+  // copy from *before* the burst, silently reverting local state and
+  // dropping whatever was added in between. This is what ate Sides/Baking
+  // last time. Waiting here for syncStatus to return to "synced" (not just
+  // a fixed delay) after each recipe serializes the writes so each one is
+  // actually confirmed before the next fires.
+  const syncStatusRef = useRef(syncStatus);
+  useEffect(() => {
+    syncStatusRef.current = syncStatus;
+  }, [syncStatus]);
+
+  async function waitForSync(timeoutMs = 10000) {
+    // Give React a tick to flip syncStatus to "syncing" first, so we don't
+    // race past a write that hasn't started yet.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const start = Date.now();
+    while (syncStatusRef.current === "syncing" && Date.now() - start < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
 
   useEffect(() => {
     fetch("/bulk-import-data.json")
@@ -113,14 +137,21 @@ export default function BulkImportPage() {
 
         const draft = draftFromImport(partial, folderId, "manual");
         addRecipe(draft);
+        // Wait for this recipe's cloud write to actually confirm before
+        // moving on — see the comment on waitForSync above for why.
+        await waitForSync();
+        if (syncStatusRef.current === "conflict") {
+          // A version conflict came back and didn't resolve to "synced" in
+          // time — flag it loudly rather than silently moving on, since a
+          // conflict can mean the app pulled down a stale cloud copy.
+          setRows((prev) => ({ ...prev, [r.slug]: "error" }));
+          continue;
+        }
         setRows((prev) => ({ ...prev, [r.slug]: "done" }));
       } catch (err) {
         console.error(`Failed to import ${r.title}`, err);
         setRows((prev) => ({ ...prev, [r.slug]: "error" }));
       }
-      // Small pause between writes so each save has a moment to settle
-      // before the next one fires.
-      await new Promise((resolve) => setTimeout(resolve, 300));
     }
     setBatchesRun((n) => n + 1);
     setRunning(false);
