@@ -30,8 +30,23 @@ export function loadAppData(): AppData {
   }
 }
 
+/**
+ * localStorage is only an offline mirror here — Supabase (saveCloudData in
+ * AppProvider) is the real source of truth and is written independently,
+ * right alongside this call. localStorage.setItem CAN throw (most commonly
+ * QuotaExceededError once a library with embedded recipe photos grows past
+ * the browser's per-origin storage cap, typically 5-10MB) — letting that
+ * escape uncaught previously took down the whole app on every subsequent
+ * mutation, even though the cloud write it ran alongside kept succeeding.
+ * Swallow it here: worst case the offline cache lags until something frees
+ * up space, but the app keeps working and the cloud copy stays correct.
+ */
 export function saveAppData(data: AppData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn("saveAppData: localStorage write failed, offline cache not updated", err);
+  }
 }
 
 export function createId(): string {

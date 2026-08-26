@@ -11,11 +11,17 @@
  * every write goes through the existing sync + conflict-guard machinery,
  * nothing bypasses it.
  *
+ * Imports happen in 3 batches (one button click each) rather than one long
+ * auto-loop — a smaller, visible chunk at a time, and each batch only
+ * proceeds once you click it. Any recipe whose title already exists in the
+ * library is skipped automatically, so it's safe to reload and re-run a
+ * batch that didn't finish.
+ *
  * This route (and public/bulk-import-data.json) should be deleted once the
  * import is confirmed to have worked.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/context/AppProvider";
 import { draftFromImport } from "@/lib/recipeUtils";
 import type { ImportedRecipe } from "@/lib/types";
@@ -35,80 +41,92 @@ type BulkRecipe = {
 
 type RowStatus = "pending" | "importing" | "done" | "error" | "skipped";
 
+const BATCH_COUNT = 3;
+
+function splitIntoBatches<T>(items: T[], batchCount: number): T[][] {
+  const batches: T[][] = Array.from({ length: batchCount }, () => []);
+  const perBatch = Math.ceil(items.length / batchCount);
+  items.forEach((item, i) => {
+    batches[Math.min(Math.floor(i / perBatch), batchCount - 1)].push(item);
+  });
+  return batches.filter((b) => b.length > 0);
+}
+
 export default function BulkImportPage() {
   const { ready, user, addRecipe, folders, recipes: existingRecipes } = useApp();
+  const [allRecipes, setAllRecipes] = useState<BulkRecipe[] | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [rows, setRows] = useState<Record<string, RowStatus>>({});
   const [running, setRunning] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const [loadError, setLoadError] = useState("");
+  const [batchesRun, setBatchesRun] = useState(0);
 
-  async function runImport() {
+  useEffect(() => {
+    fetch("/bulk-import-data.json")
+      .then((res) => {
+        if (!res.ok) throw new Error(`Could not load bulk-import-data.json (${res.status})`);
+        return res.json();
+      })
+      .then((data: BulkRecipe[]) => {
+        setAllRecipes(data);
+        const initial: Record<string, RowStatus> = {};
+        data.forEach((r) => (initial[r.slug] = "pending"));
+        setRows(initial);
+      })
+      .catch((err) => setLoadError(err instanceof Error ? err.message : "Load failed"));
+  }, []);
+
+  const knownFolderIds = new Set(folders.map((f) => f.id));
+  const existingTitles = new Set(
+    existingRecipes.map((existing) => existing.title.trim().toLowerCase()),
+  );
+
+  const batches = allRecipes ? splitIntoBatches(allRecipes, BATCH_COUNT) : [];
+  const nextBatch = batches[batchesRun];
+
+  async function runBatch(batch: BulkRecipe[]) {
     setRunning(true);
-    setFinished(false);
-    setLoadError("");
-
-    try {
-      const res = await fetch("/bulk-import-data.json");
-      if (!res.ok) throw new Error(`Could not load bulk-import-data.json (${res.status})`);
-      const recipes: BulkRecipe[] = await res.json();
-
-      const initial: Record<string, RowStatus> = {};
-      recipes.forEach((r) => (initial[r.slug] = "pending"));
-      setRows(initial);
-
-      const knownFolderIds = new Set(folders.map((f) => f.id));
-      // Titles already in the library — lets this page be re-run safely
-      // (e.g. after a mid-run crash) without creating duplicate recipes.
-      const existingTitles = new Set(
-        existingRecipes.map((existing) => existing.title.trim().toLowerCase()),
-      );
-
-      for (const r of recipes) {
-        if (existingTitles.has(r.title.trim().toLowerCase())) {
-          setRows((prev) => ({ ...prev, [r.slug]: "skipped" }));
-          continue;
-        }
-        setRows((prev) => ({ ...prev, [r.slug]: "importing" }));
-        try {
-          // If this account's folder IDs ever differ from weeknight/weekend/
-          // baking (e.g. re-created from scratch), fall back to the first
-          // folder rather than writing to a folder id that doesn't exist.
-          const folderId = knownFolderIds.has(r.folderId)
-            ? r.folderId
-            : folders[0]?.id ?? r.folderId;
-
-          const partial: ImportedRecipe = {
-            title: r.title,
-            author: r.author,
-            cookTime: r.cookTime,
-            yields: r.yields,
-            ingredients: r.ingredients,
-            instructions: r.instructions,
-            notes: r.notes,
-            imageUrl: r.imageUrl,
-            description: r.title,
-          };
-
-          const draft = draftFromImport(partial, folderId, "manual");
-          addRecipe(draft);
-          setRows((prev) => ({ ...prev, [r.slug]: "done" }));
-        } catch (err) {
-          console.error(`Failed to import ${r.title}`, err);
-          setRows((prev) => ({ ...prev, [r.slug]: "error" }));
-        }
-        // Small pause between writes so each one has a moment to sync
-        // before the next fires, rather than firing all 22 in one tick.
-        await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const r of batch) {
+      if (existingTitles.has(r.title.trim().toLowerCase())) {
+        setRows((prev) => ({ ...prev, [r.slug]: "skipped" }));
+        continue;
       }
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Import failed");
-    } finally {
-      setRunning(false);
-      setFinished(true);
+      setRows((prev) => ({ ...prev, [r.slug]: "importing" }));
+      try {
+        // If this account's folder IDs ever differ from weeknight/weekend/
+        // baking (e.g. re-created from scratch), fall back to the first
+        // folder rather than writing to a folder id that doesn't exist.
+        const folderId = knownFolderIds.has(r.folderId)
+          ? r.folderId
+          : folders[0]?.id ?? r.folderId;
+
+        const partial: ImportedRecipe = {
+          title: r.title,
+          author: r.author,
+          cookTime: r.cookTime,
+          yields: r.yields,
+          ingredients: r.ingredients,
+          instructions: r.instructions,
+          notes: r.notes,
+          imageUrl: r.imageUrl,
+          description: r.title,
+        };
+
+        const draft = draftFromImport(partial, folderId, "manual");
+        addRecipe(draft);
+        setRows((prev) => ({ ...prev, [r.slug]: "done" }));
+      } catch (err) {
+        console.error(`Failed to import ${r.title}`, err);
+        setRows((prev) => ({ ...prev, [r.slug]: "error" }));
+      }
+      // Small pause between writes so each save has a moment to settle
+      // before the next one fires.
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
+    setBatchesRun((n) => n + 1);
+    setRunning(false);
   }
 
-  if (!ready) {
+  if (!ready || (allRecipes === null && !loadError)) {
     return (
       <div className="flex min-h-screen items-center justify-center text-[#86868b]">
         Loading…
@@ -125,9 +143,10 @@ export default function BulkImportPage() {
     );
   }
 
-  const doneCount = Object.values(rows).filter((s) => s === "done").length;
+  const doneCount = Object.values(rows).filter((s) => s === "done" || s === "skipped").length;
   const errorCount = Object.values(rows).filter((s) => s === "error").length;
   const total = Object.keys(rows).length;
+  const allBatchesRun = batches.length > 0 && batchesRun >= batches.length;
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] px-4 py-10 sm:px-6">
@@ -137,20 +156,11 @@ export default function BulkImportPage() {
         </h1>
         <p className="mt-2 text-sm text-[#86868b]">
           Signed in as {user.email}. This imports 22 recipes from your recipe
-          book into Mains / Sides / Baking. It uses the same save path as
-          adding a recipe by hand, so it's safe to run — but it's meant to be
-          run once.
+          book into Mains / Sides / Baking, in {batches.length || BATCH_COUNT}{" "}
+          batches — click each batch when you're ready for it. Recipes already
+          in your library (by title) are skipped automatically, so it's safe
+          to re-run a batch.
         </p>
-
-        {!running && !finished && (
-          <button
-            type="button"
-            onClick={runImport}
-            className="mt-6 rounded-xl bg-[#0071e3] px-5 py-3 text-sm font-semibold text-white hover:bg-[#0077ed]"
-          >
-            Import 22 recipes
-          </button>
-        )}
 
         {loadError && (
           <div className="mt-6 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -158,12 +168,25 @@ export default function BulkImportPage() {
           </div>
         )}
 
+        {!allBatchesRun && nextBatch && (
+          <button
+            type="button"
+            disabled={running}
+            onClick={() => runBatch(nextBatch)}
+            className="mt-6 rounded-xl bg-[#0071e3] px-5 py-3 text-sm font-semibold text-white hover:bg-[#0077ed] disabled:opacity-50"
+          >
+            {running
+              ? "Importing…"
+              : `Import batch ${batchesRun + 1} of ${batches.length} (${nextBatch.length} recipes)`}
+          </button>
+        )}
+
         {total > 0 && (
           <div className="mt-6 rounded-2xl bg-white p-4 ring-1 ring-[#e5e5ea]">
             <p className="mb-3 text-sm font-medium text-[#1d1d1f]">
-              {finished
-                ? `Done — ${doneCount} of ${total} imported${errorCount ? `, ${errorCount} failed` : ""}.`
-                : `Importing… ${doneCount} of ${total} so far`}
+              {doneCount} of {total} accounted for
+              {errorCount ? `, ${errorCount} failed` : ""}
+              {allBatchesRun ? " — all batches run." : ""}
             </p>
             <ul className="flex flex-col gap-1 text-sm">
               {Object.entries(rows).map(([slug, status]) => (
@@ -177,9 +200,7 @@ export default function BulkImportPage() {
                           ? "text-red-600"
                           : status === "importing"
                             ? "text-[#0071e3]"
-                            : status === "skipped"
-                              ? "text-[#86868b]"
-                              : "text-[#86868b]"
+                            : "text-[#86868b]"
                     }
                   >
                     {status}
@@ -190,7 +211,7 @@ export default function BulkImportPage() {
           </div>
         )}
 
-        {finished && (
+        {allBatchesRun && (
           <p className="mt-6 text-sm text-[#86868b]">
             Go check your recipe library. Once everything looks right, let
             Claude know and this page (and the data file it loads) can be
