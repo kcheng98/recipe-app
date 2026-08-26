@@ -33,10 +33,10 @@ type BulkRecipe = {
   imageUrl: string;
 };
 
-type RowStatus = "pending" | "importing" | "done" | "error";
+type RowStatus = "pending" | "importing" | "done" | "error" | "skipped";
 
 export default function BulkImportPage() {
-  const { ready, user, addRecipe, folders } = useApp();
+  const { ready, user, addRecipe, folders, recipes: existingRecipes } = useApp();
   const [rows, setRows] = useState<Record<string, RowStatus>>({});
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -57,8 +57,17 @@ export default function BulkImportPage() {
       setRows(initial);
 
       const knownFolderIds = new Set(folders.map((f) => f.id));
+      // Titles already in the library — lets this page be re-run safely
+      // (e.g. after a mid-run crash) without creating duplicate recipes.
+      const existingTitles = new Set(
+        existingRecipes.map((existing) => existing.title.trim().toLowerCase()),
+      );
 
       for (const r of recipes) {
+        if (existingTitles.has(r.title.trim().toLowerCase())) {
+          setRows((prev) => ({ ...prev, [r.slug]: "skipped" }));
+          continue;
+        }
         setRows((prev) => ({ ...prev, [r.slug]: "importing" }));
         try {
           // If this account's folder IDs ever differ from weeknight/weekend/
@@ -168,7 +177,9 @@ export default function BulkImportPage() {
                           ? "text-red-600"
                           : status === "importing"
                             ? "text-[#0071e3]"
-                            : "text-[#86868b]"
+                            : status === "skipped"
+                              ? "text-[#86868b]"
+                              : "text-[#86868b]"
                     }
                   >
                     {status}
