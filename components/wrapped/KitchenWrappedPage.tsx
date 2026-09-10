@@ -134,9 +134,9 @@ function ProteinMixBars({ mix }: { mix: { proteinType: ProteinType; count: numbe
         return (
           <div
             key={slice.proteinType}
-            className="grid grid-cols-[92px_1fr_34px] items-center gap-2.5 sm:grid-cols-[132px_1fr_40px] sm:gap-3"
+            className="grid grid-cols-[auto_1fr_auto] items-center gap-2.5 sm:gap-3"
           >
-            <span className="min-w-0 whitespace-normal text-[13px] leading-tight text-[#515154]">
+            <span className="whitespace-nowrap text-[13px] text-[#515154] sm:text-sm">
               {meta.emoji} {meta.label}
             </span>
             <div className="h-2 overflow-hidden rounded-full bg-[#f5f5f7]">
