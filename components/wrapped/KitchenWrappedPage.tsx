@@ -12,6 +12,10 @@
  * way to reconstruct cook history from before that (recipes only ever kept
  * a single, overwritten lastCookedAt). So a brand-new install of this
  * feature starts at zero and fills in from here.
+ *
+ * Card layout follows the approved kitchen-mockups.html reference: each
+ * card has a small uppercase grey eyebrow label, then a large bold period
+ * heading underneath — not the other way around.
  */
 
 import { useMemo, useState } from "react";
@@ -19,7 +23,6 @@ import Sidebar from "@/components/Sidebar";
 import { useApp } from "@/context/AppProvider";
 import type { ProteinType } from "@/lib/types";
 import {
-  busiestMonth,
   currentMonthKey,
   currentYearKey,
   eventsInMonth,
@@ -29,7 +32,6 @@ import {
   monthLabel,
   monthlyCountsForYear,
   mostOverdueRerun,
-  previousYearKey,
   proteinMix,
   rankMeals,
   rankMealsByFolder,
@@ -51,14 +53,24 @@ function proteinMeta(p: ProteinType) {
   return PROTEIN_META[p] ?? PROTEIN_META.none;
 }
 
+/** "Aug 9–12" within one month, "Aug 30–Sep 2" across a month boundary. */
+function formatDateRange(startISO: string, endISO: string): string {
+  const s = new Date(`${startISO}T00:00:00`);
+  const e = new Date(`${endISO}T00:00:00`);
+  const monthOf = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
+  const start = `${monthOf(s)} ${s.getDate()}`;
+  const end = monthOf(s) === monthOf(e) ? `${e.getDate()}` : `${monthOf(e)} ${e.getDate()}`;
+  return `${start}–${end}`;
+}
+
 // ─── Small presentational pieces ──────────────────────────────────────────────
 
-function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function SectionCard({ eyebrow, period, children }: { eyebrow: string; period?: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl bg-white p-5 ring-1 ring-[#e5e5ea]">
-      <h2 className="text-lg font-semibold text-[#1d1d1f]">{title}</h2>
-      {subtitle && <p className="mt-0.5 text-sm text-[#86868b]">{subtitle}</p>}
-      <div className="mt-4">{children}</div>
+      <p className="text-xs font-bold uppercase tracking-wide text-[#86868b]">{eyebrow}</p>
+      {period && <p className="mt-0.5 text-xl font-bold tracking-tight text-[#1d1d1f]">{period}</p>}
+      <div className={period ? "mt-4" : "mt-3"}>{children}</div>
     </section>
   );
 }
@@ -67,110 +79,33 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-[#86868b]">{children}</p>;
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between py-1.5">
-      <span className="text-sm text-[#515154]">{label}</span>
-      <span className="text-sm font-semibold text-[#1d1d1f]">{value}</span>
-    </div>
-  );
-}
-
 function TopMealsRow({ meals }: { meals: RankedMeal[] }) {
   const top3 = meals.slice(0, 3);
   return (
     <div className="grid grid-cols-3 gap-3">
-      {top3.map((meal) => {
+      {top3.map((meal, i) => {
         const meta = proteinMeta(meal.proteinType);
         return (
           <div key={meal.recipeId} className="text-center">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-[#f5f5f7] ring-1 ring-[#e5e5ea]">
+            <div
+              className="relative mx-auto flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl"
+              style={{ background: `${meta.color}22` }}
+            >
+              <span className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-[11px] font-bold text-white">
+                {i + 1}
+              </span>
               {meal.recipe?.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={meal.recipe.imageUrl} alt={meal.recipeTitle} className="h-full w-full object-cover" />
               ) : (
-                <span className="text-2xl">{meta.emoji}</span>
+                <span className="text-3xl">{meta.emoji}</span>
               )}
             </div>
-            <p className="mt-2 truncate text-sm font-medium text-[#1d1d1f]">{meal.recipeTitle}</p>
+            <p className="mt-2 truncate text-[13px] font-semibold leading-tight text-[#1d1d1f]">{meal.recipeTitle}</p>
             <p className="text-xs text-[#86868b]">{meal.count}×</p>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function YtdBarChart({ data, currentMonth }: { data: MonthlyCount[]; currentMonth: string }) {
-  const max = Math.max(1, ...data.map((d) => d.count));
-  const total = data.reduce((sum, d) => sum + d.count, 0);
-  const avg = data.length > 0 ? total / data.length : 0;
-  const busiestEntry = data.reduce<MonthlyCount | null>(
-    (best, d) => (best === null || d.count > best.count ? d : best),
-    null,
-  );
-  const busiestLabel =
-    busiestEntry && busiestEntry.count > 0 ? `${monthLabel(busiestEntry.month).split(" ")[0]} · ${busiestEntry.count}×` : "—";
-
-  return (
-    <div>
-      <div className="flex items-end gap-1.5" style={{ height: 96 }}>
-        {data.map((d) => {
-          const isCurrent = d.month === currentMonth;
-          const heightPct = d.count === 0 ? 4 : Math.max(8, (d.count / max) * 100);
-          return (
-            <div key={d.month} className="flex flex-1 flex-col items-center justify-end gap-1">
-              <div
-                className="w-full rounded-t-md"
-                style={{ height: `${heightPct}%`, backgroundColor: isCurrent ? "#0071e3" : "#cfe0fb" }}
-              />
-              <span className={`text-[10px] ${isCurrent ? "font-semibold text-[#0071e3]" : "text-[#86868b]"}`}>
-                {monthLabel(d.month).slice(0, 3)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#e5e5ea] pt-3 text-center">
-        <div>
-          <p className="text-xs text-[#86868b]">Total</p>
-          <p className="text-sm font-semibold text-[#1d1d1f]">{total}</p>
-        </div>
-        <div>
-          <p className="text-xs text-[#86868b]">Avg / month</p>
-          <p className="text-sm font-semibold text-[#1d1d1f]">{avg.toFixed(1)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-[#86868b]">Busiest</p>
-          <p className="text-sm font-semibold text-[#1d1d1f]">{busiestLabel}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FactTile({
-  emoji,
-  label,
-  value,
-  tone,
-}: {
-  emoji: string;
-  label: string;
-  value: string;
-  tone: "a" | "b" | "c" | "d";
-}) {
-  const toneClasses: Record<string, string> = {
-    a: "bg-[#eef6ff] text-[#0071e3]",
-    b: "bg-[#fff2e9] text-[#c2650a]",
-    c: "bg-[#eafaf1] text-[#1a8a53]",
-    d: "bg-[#fdeef6] text-[#c23583]",
-  };
-  return (
-    <div className={`rounded-xl p-3 ${toneClasses[tone]}`}>
-      <p className="text-lg">{emoji}</p>
-      <p className="mt-1 text-xs font-medium uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-0.5 truncate text-sm font-semibold">{value}</p>
     </div>
   );
 }
@@ -193,13 +128,13 @@ function RankedList({ meals, limit }: { meals: RankedMeal[]; limit: number }) {
 function ProteinMixBars({ mix }: { mix: { proteinType: ProteinType; count: number; pct: number }[] }) {
   if (mix.length === 0) return <EmptyNote>Nothing logged yet.</EmptyNote>;
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {mix.map((slice) => {
         const meta = proteinMeta(slice.proteinType);
         return (
           <div
             key={slice.proteinType}
-            className="grid grid-cols-[104px_1fr_34px] items-center gap-3 sm:grid-cols-[132px_1fr_40px]"
+            className="grid grid-cols-[104px_1fr_34px] items-center gap-2.5 sm:grid-cols-[132px_1fr_40px] sm:gap-3"
           >
             <span className="min-w-0 truncate text-sm text-[#515154]">
               {meta.emoji} {meta.label}
@@ -218,6 +153,81 @@ function ProteinMixBars({ mix }: { mix: { proteinType: ProteinType; count: numbe
   );
 }
 
+function YtdBarChart({ data, currentMonth }: { data: MonthlyCount[]; currentMonth: string }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+
+  return (
+    <div className="flex items-end gap-1.5 pt-5" style={{ height: 120 }}>
+      {data.map((d) => {
+        const isCurrent = d.month === currentMonth;
+        const heightPct = d.count === 0 ? 4 : Math.max(6, (d.count / max) * 100);
+        return (
+          <div key={d.month} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+            <div className="relative w-full" style={{ height: `${heightPct}%` }}>
+              <span
+                className={`absolute -top-[18px] left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold tabular-nums ${
+                  isCurrent ? "text-[#0071e3]" : "text-[#86868b]"
+                }`}
+              >
+                {d.count}
+              </span>
+              <div
+                className="h-full max-w-[28px] rounded-t-md rounded-b-[3px]"
+                style={{ marginInline: "auto", backgroundColor: isCurrent ? "#0071e3" : "#e5e5ea" }}
+              />
+            </div>
+            <span className={`text-[10.5px] font-semibold ${isCurrent ? "text-[#1d1d1f]" : "text-[#86868b]"}`}>
+              {monthLabel(d.month).slice(0, 3)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function YtdSummary({ data }: { data: MonthlyCount[] }) {
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  const avg = data.length > 0 ? total / data.length : 0;
+  const busiestEntry = data.reduce<MonthlyCount | null>(
+    (best, d) => (best === null || d.count > best.count ? d : best),
+    null,
+  );
+  const busiestLabel = busiestEntry && busiestEntry.count > 0 ? monthLabel(busiestEntry.month).slice(0, 3) : "—";
+
+  return (
+    <div className="mt-3 flex justify-between border-t border-[#e5e5ea] pt-3">
+      <div>
+        <p className="text-[17px] font-bold tabular-nums text-[#1d1d1f]">{total}</p>
+        <p className="text-xs text-[#86868b]">Total this year</p>
+      </div>
+      <div>
+        <p className="text-[17px] font-bold tabular-nums text-[#1d1d1f]">{avg.toFixed(1)}</p>
+        <p className="text-xs text-[#86868b]">Avg / month</p>
+      </div>
+      <div>
+        <p className="text-[17px] font-bold tabular-nums text-[#1d1d1f]">{busiestLabel}</p>
+        <p className="text-xs text-[#86868b]">Busiest month</p>
+      </div>
+    </div>
+  );
+}
+
+function FactTile({ value, label, tone }: { value: string; label: string; tone: "a" | "b" | "c" | "d" }) {
+  const toneClasses: Record<string, string> = {
+    a: "bg-[#eaf3ff]",
+    b: "bg-[#fdeee0]",
+    c: "bg-[#e6f6ec]",
+    d: "bg-[#f1e9fb]",
+  };
+  return (
+    <div className={`rounded-2xl p-3.5 ${toneClasses[tone]}`}>
+      <p className="text-[22px] font-extrabold tracking-tight text-[#1d1d1f]">{value}</p>
+      <p className="mt-0.5 text-xs leading-snug text-[#1d1d1f] opacity-75">{label}</p>
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function KitchenWrappedPage() {
@@ -226,21 +236,14 @@ export default function KitchenWrappedPage() {
 
   const nowMonthKey = currentMonthKey();
   const nowYearKey = currentYearKey();
-  const prevYearKey = previousYearKey(nowYearKey);
 
   const monthEvents = useMemo(() => eventsInMonth(cookLog, nowMonthKey), [cookLog, nowMonthKey]);
   const yearEvents = useMemo(() => eventsInYear(cookLog, nowYearKey), [cookLog, nowYearKey]);
-  const prevYearEvents = useMemo(() => eventsInYear(cookLog, prevYearKey), [cookLog, prevYearKey]);
 
   const monthTop = useMemo(() => rankMeals(monthEvents, recipes), [monthEvents, recipes]);
   const yearTop = useMemo(() => rankMeals(yearEvents, recipes), [yearEvents, recipes]);
-  const monthProtein = useMemo(() => proteinMix(monthEvents), [monthEvents]);
   const yearProtein = useMemo(() => proteinMix(yearEvents), [yearEvents]);
   const byFolder = useMemo(() => rankMealsByFolder(yearEvents, recipes), [yearEvents, recipes]);
-
-  const busiest = useMemo(() => busiestMonth(yearEvents), [yearEvents]);
-  const yearDelta = yearEvents.length - prevYearEvents.length;
-  const hasPriorYearData = prevYearEvents.length > 0;
 
   const monthlyCounts = useMemo(
     () => monthlyCountsForYear(yearEvents, nowMonthKey),
@@ -304,55 +307,34 @@ export default function KitchenWrappedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <SectionCard title="This month" subtitle={monthLabel(nowMonthKey)}>
+              <SectionCard eyebrow="This month" period={monthLabel(nowMonthKey)}>
                 {monthTop.length > 0 ? (
-                  <>
-                    <TopMealsRow meals={monthTop} />
-                    <div className="mt-5">
-                      <YtdBarChart data={monthlyCounts} currentMonth={nowMonthKey} />
-                    </div>
-                    {monthProtein.length > 0 && (
-                      <div className="mt-5">
-                        <ProteinMixBars mix={monthProtein} />
-                      </div>
-                    )}
-                  </>
+                  <TopMealsRow meals={monthTop} />
                 ) : (
                   <EmptyNote>No meals logged this month yet.</EmptyNote>
                 )}
               </SectionCard>
 
-              <SectionCard title="This year" subtitle={nowYearKey}>
-                {yearTop.length > 0 ? (
-                  <>
-                    <p className="mt-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-                      Top {Math.min(10, yearTop.length)}
-                    </p>
-                    <RankedList meals={yearTop} limit={10} />
-                    <div className="mt-4">
-                      <StatRow label="Meals cooked" value={String(yearEvents.length)} />
-                      {hasPriorYearData && (
-                        <StatRow
-                          label={`Vs. ${prevYearKey}`}
-                          value={`${yearDelta > 0 ? "+" : ""}${yearDelta}`}
-                        />
-                      )}
-                      {busiest && (
-                        <StatRow label="Busiest month" value={`${monthLabel(busiest.month)} · ${busiest.count}×`} />
-                      )}
-                    </div>
-                    <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-                      Protein mix
-                    </p>
-                    <ProteinMixBars mix={yearProtein} />
-                  </>
-                ) : (
-                  <EmptyNote>No meals logged this year yet.</EmptyNote>
-                )}
+              <SectionCard
+                eyebrow="Meals cooked"
+                period={`${monthLabel(monthlyCounts[0]?.month ?? nowMonthKey).slice(0, 3)}–${monthLabel(nowMonthKey).slice(0, 3)} ${nowYearKey}`}
+              >
+                <YtdBarChart data={monthlyCounts} currentMonth={nowMonthKey} />
+                <YtdSummary data={monthlyCounts} />
               </SectionCard>
 
+              <SectionCard eyebrow="This year" period={`${nowYearKey} · Top ${Math.min(10, yearTop.length)}`}>
+                <RankedList meals={yearTop} limit={10} />
+              </SectionCard>
+
+              {yearProtein.length > 0 && (
+                <SectionCard eyebrow="Protein mix" period={nowYearKey}>
+                  <ProteinMixBars mix={yearProtein} />
+                </SectionCard>
+              )}
+
               {byFolder.size > 0 && (
-                <SectionCard title="Top meal by folder" subtitle={nowYearKey}>
+                <SectionCard eyebrow="Top meal by folder" period={nowYearKey}>
                   <div className="space-y-3">
                     {folders
                       .filter((f) => byFolder.has(f.id))
@@ -374,30 +356,31 @@ export default function KitchenWrappedPage() {
                 </SectionCard>
               )}
 
-              <SectionCard title="Highlights">
+              <SectionCard eyebrow="Highlights" period="Fun facts, not just trivia">
                 <div className="grid grid-cols-2 gap-3">
                   {streak && streak.days > 1 && (
                     <FactTile
-                      emoji="🔥"
-                      label="Longest streak"
-                      value={`${streak.days} day${streak.days === 1 ? "" : "s"} in a row`}
+                      value={`${streak.days} days`}
+                      label={`🔥 Longest cooking streak — ${formatDateRange(streak.start, streak.end)}`}
                       tone="a"
                     />
                   )}
                   {comfortDish && (
                     <FactTile
-                      emoji="💛"
-                      label="Comfort dish"
-                      value={`${comfortDish.recipeTitle} · ${comfortDish.count}×`}
+                      value={comfortDish.recipeTitle}
+                      label="🏆 Your comfort dish — cooked more than any other, all-time"
                       tone="b"
                     />
                   )}
-                  <FactTile emoji="📚" label="Library cooked" value={`${coveragePct}% of recipes`} tone="c" />
+                  <FactTile
+                    value={`${coveragePct}%`}
+                    label="📚 Of your library you've actually cooked at least once"
+                    tone="c"
+                  />
                   {overdue && (
                     <FactTile
-                      emoji="⏰"
-                      label="Overdue for a rerun"
-                      value={`${overdue.recipeTitle} · ${overdue.daysSince}d ago`}
+                      value={`${overdue.daysSince} days`}
+                      label={`⏳ Since ${overdue.recipeTitle} — most overdue rerun`}
                       tone="d"
                     />
                   )}
