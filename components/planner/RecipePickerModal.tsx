@@ -12,8 +12,8 @@ import { useApp } from "@/context/AppProvider";
 import type { Recipe } from "@/lib/types";
 
 interface Props {
-  /** The date of the slot being filled, e.g. "2026-05-19". Null = closed. */
-  date: string | null;
+  /** The slot being filled (main or side) — id to target, date for display. Null = closed. */
+  target: { id: string; date: string } | null;
   onClose: () => void;
 }
 
@@ -71,8 +71,8 @@ function RecipeRow({
   );
 }
 
-export function RecipePickerModal({ date, onClose }: Props) {
-  const { recipes, assignSlot } = useApp();
+export function RecipePickerModal({ target, onClose }: Props) {
+  const { recipes, assignSlotRecipe } = useApp();
   const [query, setQuery] = useState("");
 
   // Mobile browsers don't shrink a `vh`-sized `fixed inset-0` overlay when
@@ -105,12 +105,12 @@ export function RecipePickerModal({ date, onClose }: Props) {
   }, [recipes, query]);
 
   const handleSelect = (recipe: Recipe) => {
-    if (!date) return;
-    assignSlot(date, recipe.id);
+    if (!target) return;
+    assignSlotRecipe(target.id, recipe.id);
     onClose();
   };
 
-  if (!date) return null;
+  if (!target) return null;
 
   return (
     <div
@@ -138,7 +138,7 @@ export function RecipePickerModal({ date, onClose }: Props) {
               ✕
             </button>
           </div>
-          <p className="text-xs text-gray-400 mb-3">{formatDayLabel(date)}</p>
+          <p className="text-xs text-gray-400 mb-3">{formatDayLabel(target.date)}</p>
 
           {/* Search */}
           <div className="relative">

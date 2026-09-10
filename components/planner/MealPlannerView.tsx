@@ -12,9 +12,17 @@
  *
  *   Feature 2 — Drag-to-reorder upcoming meals
  *     • @dnd-kit/core + @dnd-kit/sortable wraps the upcoming section.
- *     • Dragging reorders recipe *assignments* across fixed date slots.
- *     • Locked slots are not draggable and cannot be dropped into.
+ *     • Dragging reorders whole day groups (a date's main + all its sides)
+ *       across fixed date slots — a day's sides always travel with it.
+ *     • Locked days (main locked) are not draggable and cannot be dropped into.
  *     • On drag end, calls reorderSlots() from context (see AppProvider).
+ *
+ *   Feature 3 — "Add a side"
+ *     • Each day can hold any number of extra "side" slots alongside its
+ *       one auto-managed "main" — 100% manual: added, edited, locked, and
+ *       confirmed individually, never touched by regenerate/swap or the
+ *       weekly protein-target math. No swap icon on a side (picked on
+ *       purpose); the ＋ icon reopens the picker to change which recipe it is.
  */
 
 import { useState, useCallback } from "react";
@@ -71,6 +79,28 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// ─── Day grouping ──────────────────────────────────────────────────────────────
+// A date can now hold more than one slot (one main + any number of sides) —
+// group them together so the UI always renders/moves/collapses a day as one unit.
+
+type DayGroup = { date: string; main: MealSlot; sides: MealSlot[] };
+
+function groupByDate(slots: MealSlot[]): DayGroup[] {
+  const byDate = new Map<string, MealSlot[]>();
+  for (const s of slots) {
+    const list = byDate.get(s.date) ?? [];
+    list.push(s);
+    byDate.set(s.date, list);
+  }
+  const groups: DayGroup[] = [];
+  for (const [date, list] of byDate) {
+    const main = list.find((s) => s.role === "main") ?? list[0];
+    const sides = list.filter((s) => s.role === "side");
+    groups.push({ date, main, sides });
+  }
+  return groups.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
 function StatusBadge({ slot, isPast }: { slot: MealSlot; isPast: boolean }) {
@@ -98,15 +128,15 @@ function StatusBadge({ slot, isPast }: { slot: MealSlot; isPast: boolean }) {
 // ─── Collapsed (slim) row for historical days ─────────────────────────────────
 
 function CollapsedDayRow({
-  slot,
+  group,
   recipe,
   onExpand,
 }: {
-  slot: MealSlot;
+  group: DayGroup;
   recipe: Recipe | null;
   onExpand: () => void;
 }) {
-  const isPast = slot.date < todayISO();
+  const isPast = group.date < todayISO();
   return (
     <button
       onClick={onExpand}
@@ -115,19 +145,22 @@ function CollapsedDayRow({
     >
       <span className="text-gray-300 group-hover:text-gray-400 transition text-xs">▸</span>
       <span className="text-xs font-semibold text-gray-400 w-12 flex-shrink-0">
-        {formatDayLabel(slot.date)}
+        {formatDayLabel(group.date)}
       </span>
       <span className="flex-1 text-xs text-gray-500 truncate">
         {recipe ? recipe.title : <em className="text-gray-300">No recipe</em>}
       </span>
-      <StatusBadge slot={slot} isPast={isPast} />
+      {group.sides.length > 0 && (
+        <span className="text-[10.5px] font-semibold text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 flex-shrink-0">
+          +{group.sides.length} side{group.sides.length === 1 ? "" : "s"}
+        </span>
+      )}
+      <StatusBadge slot={group.main} isPast={isPast} />
     </button>
   );
 }
 
-// ─── Full DayCard ──────────────────────────────────────────────────────────────
-
-// ─── DayCard (used for both history and the drag overlay visual) ──────────────
+// ─── Full DayCard (main slot) ──────────────────────────────────────────────────
 
 function DayCard({
   slot,
@@ -135,6 +168,7 @@ function DayCard({
   onLock,
   onSwap,
   onAdd,
+  onConfirmCooked,
   onSkip,
   onCollapse,
   isHistory,
@@ -146,6 +180,7 @@ function DayCard({
   onLock: () => void;
   onSwap: () => void;
   onAdd: () => void;
+  onConfirmCooked: () => void;
   onSkip: () => void;
   onCollapse?: () => void;
   isHistory?: boolean;
@@ -222,6 +257,18 @@ function DayCard({
           {slot.isLocked ? "🔒" : "🔓"}
         </button>
         <button
+          onClick={onConfirmCooked}
+          disabled={!recipe}
+          title="Mark cooked"
+          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition
+            ${slot.status === "cooked"
+              ? "bg-green-100 text-green-600"
+              : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500"}
+            disabled:opacity-30 disabled:cursor-not-allowed`}
+        >
+          ✓
+        </button>
+        <button
           onClick={onSwap}
           disabled={slot.isLocked || !recipe}
           title="Swap recipe"
@@ -252,22 +299,198 @@ function DayCard({
   );
 }
 
-// ─── Sortable wrapper — whole card is the drag surface ────────────────────────
+// ─── Side row ──────────────────────────────────────────────────────────────────
 
-function SortableDayCard({
+function SideRow({
   slot,
   recipe,
   onLock,
-  onSwap,
-  onAdd,
-  onSkip,
+  onEdit,
+  onConfirmCooked,
+  onRemove,
 }: {
   slot: MealSlot;
   recipe: Recipe | null;
   onLock: () => void;
-  onSwap: () => void;
-  onAdd: () => void;
-  onSkip: () => void;
+  onEdit: () => void;
+  onConfirmCooked: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5">
+      {/* Thumbnail */}
+      <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 flex items-center justify-center">
+        {recipe?.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={recipe.imageUrl} alt={recipe.title} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-base select-none">{recipe ? "🍽️" : "＋"}</span>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-[9.5px] font-extrabold uppercase tracking-wide text-gray-300 leading-none mb-0.5">
+          Side
+        </p>
+        {recipe ? (
+          <Link
+            href={`/recipe/recipes/${recipe.id}?from=planner`}
+            className="text-[13px] font-semibold text-gray-800 leading-tight line-clamp-1 hover:text-orange-500 transition-colors"
+          >
+            {recipe.title}
+          </Link>
+        ) : (
+          <p className="text-[13px] text-gray-400 italic">No recipe assigned</p>
+        )}
+        <div className="mt-0.5">
+          <StatusBadge slot={slot} isPast={slot.date < todayISO()} />
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+          onClick={onLock}
+          title={slot.isLocked ? "Unlock side" : "Lock side"}
+          className={`rounded-lg flex items-center justify-center text-xs transition
+            ${slot.isLocked
+              ? "bg-orange-100 text-orange-500 hover:bg-orange-200"
+              : "bg-gray-100 text-gray-400 hover:bg-orange-50 hover:text-orange-400"}`}
+          style={{ width: "26px", height: "26px" }}
+        >
+          {slot.isLocked ? "🔒" : "🔓"}
+        </button>
+        <button
+          onClick={onEdit}
+          title="Edit / change recipe"
+          style={{ width: "26px", height: "26px" }}
+          className="rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center
+                     hover:bg-green-50 hover:text-green-500 transition text-sm leading-none"
+        >
+          ＋
+        </button>
+        <button
+          onClick={onConfirmCooked}
+          disabled={!recipe}
+          title="Mark cooked"
+          style={{ width: "26px", height: "26px" }}
+          className={`rounded-lg flex items-center justify-center text-xs font-bold transition
+            ${slot.status === "cooked"
+              ? "bg-green-100 text-green-600"
+              : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500"}
+            disabled:opacity-30 disabled:cursor-not-allowed`}
+        >
+          ✓
+        </button>
+        <button
+          onClick={onRemove}
+          title="Remove side"
+          style={{ width: "26px", height: "26px" }}
+          className="rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center
+                     hover:bg-red-50 hover:text-red-400 transition text-xs"
+        >
+          🗑
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Day group wrapper — main card + its sides + "Add a side" ─────────────────
+
+function DayGroupBody({
+  group,
+  resolveRecipe,
+  mainActions,
+  sideActionsFor,
+  onAddSide,
+  isHistory,
+  onCollapse,
+  isDragging,
+  showDragHint,
+}: {
+  group: DayGroup;
+  resolveRecipe: (slot: MealSlot) => Recipe | null;
+  mainActions: {
+    onLock: () => void;
+    onSwap: () => void;
+    onAdd: () => void;
+    onConfirmCooked: () => void;
+    onSkip: () => void;
+  };
+  sideActionsFor: (slot: MealSlot) => {
+    onLock: () => void;
+    onEdit: () => void;
+    onConfirmCooked: () => void;
+    onRemove: () => void;
+  };
+  onAddSide: () => void;
+  isHistory?: boolean;
+  onCollapse?: () => void;
+  isDragging?: boolean;
+  showDragHint?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <DayCard
+        slot={group.main}
+        recipe={resolveRecipe(group.main)}
+        isHistory={isHistory}
+        onCollapse={onCollapse}
+        isDragging={isDragging}
+        showDragHint={showDragHint}
+        {...mainActions}
+      />
+      {group.sides.length > 0 && (
+        <div className="ml-5 pl-3.5 border-l-2 border-dashed border-gray-100">
+          {group.sides.map((side) => (
+            <SideRow
+              key={side.id}
+              slot={side}
+              recipe={resolveRecipe(side)}
+              {...sideActionsFor(side)}
+            />
+          ))}
+        </div>
+      )}
+      <button
+        onClick={onAddSide}
+        className="ml-5 mt-0.5 self-start inline-flex items-center gap-1.5 rounded-full border border-dashed
+                   border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-400
+                   hover:text-orange-500 hover:border-orange-200 hover:bg-orange-50 transition"
+      >
+        ＋ {group.sides.length > 0 ? "Add another side" : "Add a side"}
+      </button>
+    </div>
+  );
+}
+
+// ─── Sortable wrapper — whole day group is the drag surface ───────────────────
+
+function SortableDayGroup({
+  group,
+  resolveRecipe,
+  mainActions,
+  sideActionsFor,
+  onAddSide,
+}: {
+  group: DayGroup;
+  resolveRecipe: (slot: MealSlot) => Recipe | null;
+  mainActions: {
+    onLock: () => void;
+    onSwap: () => void;
+    onAdd: () => void;
+    onConfirmCooked: () => void;
+    onSkip: () => void;
+  };
+  sideActionsFor: (slot: MealSlot) => {
+    onLock: () => void;
+    onEdit: () => void;
+    onConfirmCooked: () => void;
+    onRemove: () => void;
+  };
+  onAddSide: () => void;
 }) {
   const {
     attributes,
@@ -277,8 +500,8 @@ function SortableDayCard({
     transition,
     isDragging,
   } = useSortable({
-    id: slot.date,
-    disabled: slot.isLocked,
+    id: group.date,
+    disabled: group.main.isLocked,
   });
 
   const style: React.CSSProperties = {
@@ -292,20 +515,19 @@ function SortableDayCard({
     <div
       ref={setNodeRef}
       style={style}
-      // Whole card receives drag listeners
+      // Whole group receives drag listeners
       {...attributes}
       {...listeners}
-      className={`rounded-2xl touch-none ${!slot.isLocked ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`rounded-2xl touch-none ${!group.main.isLocked ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
-      <DayCard
-        slot={slot}
-        recipe={recipe}
-        onLock={onLock}
-        onSwap={onSwap}
-        onAdd={onAdd}
-        onSkip={onSkip}
+      <DayGroupBody
+        group={group}
+        resolveRecipe={resolveRecipe}
+        mainActions={mainActions}
+        sideActionsFor={sideActionsFor}
+        onAddSide={onAddSide}
         isDragging={isDragging}
-        showDragHint={!slot.isLocked}
+        showDragHint={!group.main.isLocked}
       />
       {/* Transparent overlay blocks child button/link clicks while dragging */}
       {isDragging && (
@@ -326,13 +548,16 @@ export function MealPlannerView() {
     generateMealPlan,
     lockSlot,
     swapSlot,
+    confirmSlot,
     skipSlot,
     reorderSlots,
+    addSide,
+    removeSide,
   } = useApp();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [pickerDate, setPickerDate] = useState<string | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{ id: string; date: string } | null>(null);
 
   // ── Feature 1: collapse state for history ──────────────────────────────────
   const today = todayISO();
@@ -340,6 +565,9 @@ export function MealPlannerView() {
   const cutoff = addDays(today, -14);
   const historySlots = slots.filter((s) => s.date < today && s.date >= cutoff);
   const upcomingSlots = slots.filter((s) => s.date >= today);
+
+  const historyGroups = groupByDate(historySlots);
+  const upcomingGroups = groupByDate(upcomingSlots);
 
   // The whole Recent section starts collapsed (one click shows all rows)
   const [historySectionOpen, setHistorySectionOpen] = useState(false);
@@ -374,8 +602,8 @@ export function MealPlannerView() {
       const activeDate = active.id as string;
       const overDate = over.id as string;
 
-      // Build current order of upcoming slot dates
-      const currentDates = upcomingSlots.map((s) => s.date);
+      // Build current order of upcoming day groups (by date)
+      const currentDates = upcomingGroups.map((g) => g.date);
       const oldIndex = currentDates.indexOf(activeDate);
       const newIndex = currentDates.indexOf(overDate);
       if (oldIndex === -1 || newIndex === -1) return;
@@ -383,7 +611,7 @@ export function MealPlannerView() {
       const reordered = arrayMove(currentDates, oldIndex, newIndex);
       reorderSlots(reordered);
     },
-    [upcomingSlots, reorderSlots],
+    [upcomingGroups, reorderSlots],
   );
 
   // ── Guards ─────────────────────────────────────────────────────────────────
@@ -396,21 +624,33 @@ export function MealPlannerView() {
       : addDays(weekStart, plannerConfig.daysPerWeek - 1);
   const weekLabel = `${formatShort(weekStart)} – ${formatShort(weekEnd)}`;
 
-  // ── Shared card factory ────────────────────────────────────────────────────
+  // ── Shared card factories ──────────────────────────────────────────────────
   const resolveRecipe = (slot: MealSlot): Recipe | null =>
     slot.recipeId ? (recipes.find((r) => r.id === slot.recipeId) ?? null) : null;
 
-  const cardActions = (slot: MealSlot) => ({
-    onLock: () => lockSlot(slot.date),
-    onSwap: () => swapSlot(slot.date),
-    onAdd: () => setPickerDate(slot.date),
+  const mainActionsFor = (slot: MealSlot) => ({
+    onLock: () => lockSlot(slot.id),
+    onSwap: () => swapSlot(slot.id),
+    onAdd: () => setPickerTarget({ id: slot.id, date: slot.date }),
+    onConfirmCooked: () => confirmSlot(slot.id, true),
     onSkip: () => {
       if (confirm(`Skip ${formatDayLabel(slot.date)}? This will clear the assigned recipe.`)) {
-        skipSlot(slot.date);
+        skipSlot(slot.id);
       }
     },
   });
 
+  const sideActionsFor = (slot: MealSlot) => ({
+    onLock: () => lockSlot(slot.id),
+    onEdit: () => setPickerTarget({ id: slot.id, date: slot.date }),
+    onConfirmCooked: () => confirmSlot(slot.id, true),
+    onRemove: () => removeSide(slot.id),
+  });
+
+  const handleAddSide = (date: string) => {
+    const side = addSide(date);
+    setPickerTarget({ id: side.id, date });
+  };
 
   return (
     <>
@@ -480,7 +720,7 @@ export function MealPlannerView() {
               <div className="flex flex-col gap-2">
 
                 {/* ── Feature 1: Historical section ── */}
-                {historySlots.length > 0 && (
+                {historyGroups.length > 0 && (
                   <>
                     {/* Section header — clicking collapses/expands the entire section */}
                     <button
@@ -488,7 +728,7 @@ export function MealPlannerView() {
                       className="flex items-center gap-2 px-1 mt-1 group"
                     >
                       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                        Recent ({historySlots.length})
+                        Recent ({historyGroups.length})
                       </span>
                       <span className="text-gray-300 group-hover:text-gray-500 transition text-xs">
                         {historySectionOpen ? "▾" : "▸"}
@@ -496,24 +736,25 @@ export function MealPlannerView() {
                     </button>
 
                     {/* Rows — only rendered when section is open */}
-                    {historySectionOpen && historySlots.map((slot) => {
-                      const recipe = resolveRecipe(slot);
-                      const isExpanded = expandedDates.has(slot.date);
+                    {historySectionOpen && historyGroups.map((group) => {
+                      const isExpanded = expandedDates.has(group.date);
                       return isExpanded ? (
-                        <DayCard
-                          key={slot.date}
-                          slot={slot}
-                          recipe={recipe}
+                        <DayGroupBody
+                          key={group.date}
+                          group={group}
+                          resolveRecipe={resolveRecipe}
+                          mainActions={mainActionsFor(group.main)}
+                          sideActionsFor={sideActionsFor}
+                          onAddSide={() => handleAddSide(group.date)}
                           isHistory
-                          onCollapse={() => toggleDate(slot.date)}
-                          {...cardActions(slot)}
+                          onCollapse={() => toggleDate(group.date)}
                         />
                       ) : (
                         <CollapsedDayRow
-                          key={slot.date}
-                          slot={slot}
-                          recipe={recipe}
-                          onExpand={() => toggleDate(slot.date)}
+                          key={group.date}
+                          group={group}
+                          recipe={resolveRecipe(group.main)}
+                          onExpand={() => toggleDate(group.date)}
                         />
                       );
                     })}
@@ -532,15 +773,17 @@ export function MealPlannerView() {
                   onDragEnd={handleDragEnd}
                 >
                   <SortableContext
-                    items={upcomingSlots.map((s) => s.date)}
+                    items={upcomingGroups.map((g) => g.date)}
                     strategy={verticalListSortingStrategy}
                   >
-                    {upcomingSlots.map((slot) => (
-                      <SortableDayCard
-                        key={slot.date}
-                        slot={slot}
-                        recipe={resolveRecipe(slot)}
-                        {...cardActions(slot)}
+                    {upcomingGroups.map((group) => (
+                      <SortableDayGroup
+                        key={group.date}
+                        group={group}
+                        resolveRecipe={resolveRecipe}
+                        mainActions={mainActionsFor(group.main)}
+                        sideActionsFor={sideActionsFor}
+                        onAddSide={() => handleAddSide(group.date)}
                       />
                     ))}
                   </SortableContext>
@@ -555,7 +798,7 @@ export function MealPlannerView() {
                 {plannerConfig.daysPerWeek} dinners/week
               </p>
               <p className="text-xs text-gray-300 mt-1">
-                💡 Drag ⠿ to reorder upcoming meals. Locked slots stay fixed.
+                💡 Drag ⠿ to reorder upcoming days. Locked days stay fixed.
               </p>
             </div>
 
@@ -564,7 +807,7 @@ export function MealPlannerView() {
       </div>
 
       <PlannerOnboarding open={showOnboarding} onClose={() => setShowOnboarding(false)} />
-      <RecipePickerModal date={pickerDate} onClose={() => setPickerDate(null)} />
+      <RecipePickerModal target={pickerTarget} onClose={() => setPickerTarget(null)} />
     </>
   );
 }

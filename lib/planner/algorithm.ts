@@ -21,6 +21,7 @@
  */
 
 import type { MealPlan, MealSlot, PlannerConfig, ProteinType, Recipe } from "@/lib/types";
+import { createId } from "@/lib/storage";
 import { getSeasonalVibe } from "./weather";
 
 // ─── Scoring constants ────────────────────────────────────────────────────────
@@ -294,7 +295,9 @@ export function generatePlan(
     const recipe = assignments.get(date) ?? null;
     const isLocked = date in lockedSlots;
     return {
+      id: createId(),
       date,
+      role: "main",
       recipeId: recipe?.id ?? null,
       isLocked,
       status: recipe ? "pending" : "untracked",

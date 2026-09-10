@@ -1,4 +1,4 @@
-import { defaultAppData, normalizeNutritionConfig, normalizePlannerConfig } from "./defaults";
+import { defaultAppData, normalizeMealPlan, normalizeNutritionConfig, normalizePlannerConfig } from "./defaults";
 import type { AppData } from "./types";
 
 const STORAGE_KEY = "recipe-app-data-v1";
@@ -18,6 +18,7 @@ export function loadAppData(): AppData {
     }));
     parsed.folders.sort((a, b) => a.order - b.order);
     parsed.plannerConfig = normalizePlannerConfig(parsed.plannerConfig);
+    parsed.mealPlan = normalizeMealPlan(parsed.mealPlan);
     parsed.nutrition = normalizeNutritionConfig(parsed.nutrition);
     // Prune Kitchen Wrapped cook-log entries left over from a deleted recipe
     // (deleteRecipe now cascades going forward, but this cleans up anything

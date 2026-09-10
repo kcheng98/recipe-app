@@ -111,28 +111,35 @@ type AppContextValue = {
    * Locked slots from the current plan are preserved if the weekStart matches.
    */
   generateMealPlan: (weekStart: string) => void;
-  /** Toggle the lock on a slot by date. */
-  lockSlot: (date: string) => void;
+  /** Toggle the lock on a slot by id. Works on either a main or a side. */
+  lockSlot: (id: string) => void;
   /**
-   * Swap the recipe assigned to a slot with the next best candidate from the
-   * algorithm (skipping the current recipe).
+   * Swap the recipe assigned to a MAIN slot with the next best candidate
+   * from the algorithm (skipping the current recipe). No-ops on a side —
+   * sides were chosen on purpose and aren't swappable.
    */
-  swapSlot: (date: string) => void;
+  swapSlot: (id: string) => void;
   /**
    * Mark a slot as cooked/skipped and stamp lastCookedAt on the recipe.
-   * Called by CookConfirmIntercept when the user taps confirm/skip.
+   * Called by CookConfirmIntercept when the user taps confirm/skip, and by
+   * the manual ✓ icon on a main or side tile. Works on either role.
    */
-  confirmSlot: (date: string, cooked: boolean) => void;
-  /** Clear the recipe from a slot (the ✕ skip action on the tile). */
-  skipSlot: (date: string) => void;
-  /** Directly assign a recipe to a slot (from RecipePickerModal). */
-  assignSlot: (date: string, recipeId: string) => void;
+  confirmSlot: (id: string, cooked: boolean) => void;
+  /** Clear the recipe from a MAIN slot (the ✕ skip action on the tile). */
+  skipSlot: (id: string) => void;
+  /** Directly assign/change the recipe on an existing slot by id (from RecipePickerModal). Works on either role. */
+  assignSlotRecipe: (id: string, recipeId: string) => void;
   /**
-   * Insert a telemetry-confirmed cook into the plan as a history slot.
+   * Insert a telemetry-confirmed cook into the plan as a history MAIN slot.
    * Used by CookConfirmIntercept when the user cooked something unplanned.
    */
   insertHistorySlot: (date: string, recipeId: string) => void;
+  /** Moves whole day groups (a date's main + all its sides) together across dates. */
   reorderSlots: (orderedDates: string[]) => void;
+  /** Adds a new, empty side slot to a date — 100% manual, never touched by regenerate/swap/protein targets. */
+  addSide: (date: string) => MealSlot;
+  /** Removes a side slot entirely (the 🗑 action on a side tile). No-ops on a main — mains can't be deleted, only reassigned or skipped. */
+  removeSide: (id: string) => void;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -646,12 +653,15 @@ return () => {
       persistAndSync((prev) => {
         if (!prev.plannerConfig) return prev;
 
-        // Collect which slots are locked in the *current* plan for this week
+        // Collect which MAIN slots are locked in the *current* plan for this
+        // week — sides don't participate in generation at all, locked or not.
         const lockedSlots: Record<string, string | null> = {};
         const today = todayISO();
         if (prev.mealPlan?.weekStart === weekStart) {
           for (const slot of prev.mealPlan.slots) {
-            if (slot.isLocked && slot.date >= today) lockedSlots[slot.date] = slot.recipeId;
+            if (slot.role === "main" && slot.isLocked && slot.date >= today) {
+              lockedSlots[slot.date] = slot.recipeId;
+            }
           }
         }
 
@@ -663,10 +673,14 @@ return () => {
         );
 
         // Preserve any past slots from the existing plan (history should
-        // never be wiped by a regeneration or rolling window advance)
+        // never be wiped by a regeneration or rolling window advance), and
+        // any upcoming SIDES — regeneration only ever creates/replaces mains,
+        // sides are 100% manual and must survive every regenerate untouched.
         const pastSlots = prev.mealPlan?.slots.filter((s) => s.date < today) ?? [];
+        const upcomingSides = prev.mealPlan?.slots.filter((s) => s.date >= today && s.role === "side") ?? [];
         const mergedSlots = [
           ...pastSlots,
+          ...upcomingSides,
           ...freshPlan.slots.filter((s) => s.date >= today),
         ].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -677,7 +691,7 @@ return () => {
   );
 
   const lockSlot = useCallback(
-    (date: string) => {
+    (id: string) => {
       persistAndSync((prev) => {
         if (!prev.mealPlan) return prev;
         return {
@@ -685,7 +699,7 @@ return () => {
           mealPlan: {
             ...prev.mealPlan,
             slots: prev.mealPlan.slots.map((s) =>
-              s.date === date ? { ...s, isLocked: !s.isLocked } : s,
+              s.id === id ? { ...s, isLocked: !s.isLocked } : s,
             ),
           },
         };
@@ -695,12 +709,13 @@ return () => {
   );
 
   const swapSlot = useCallback(
-    (date: string) => {
+    (id: string) => {
       persistAndSync((prev) => {
         if (!prev.mealPlan || !prev.plannerConfig) return prev;
 
-        const slot = prev.mealPlan.slots.find((s) => s.date === date);
-        if (!slot || slot.isLocked || !slot.recipeId) return prev;
+        const slot = prev.mealPlan.slots.find((s) => s.id === id);
+        // Sides aren't swappable — they were picked on purpose.
+        if (!slot || slot.role !== "main" || slot.isLocked || !slot.recipeId) return prev;
 
         const currentRecipe = prev.recipes.find((r) => r.id === slot.recipeId);
         if (!currentRecipe) return prev;
@@ -729,7 +744,7 @@ return () => {
           mealPlan: {
             ...prev.mealPlan,
             slots: prev.mealPlan.slots.map((s) =>
-              s.date === date ? { ...s, recipeId: chosen[0].id } : s,
+              s.id === id ? { ...s, recipeId: chosen[0].id } : s,
             ),
           },
         };
@@ -739,16 +754,18 @@ return () => {
   );
 
   const confirmSlot = useCallback(
-    (date: string, cooked: boolean) => {
+    (id: string, cooked: boolean) => {
       persistAndSync((prev) => {
         if (!prev.mealPlan) return prev;
 
-        const slot = prev.mealPlan.slots.find((s) => s.date === date);
+        const slot = prev.mealPlan.slots.find((s) => s.id === id);
+        if (!slot) return prev;
+        const date = slot.date;
 
         // If cooked, also stamp lastCookedAt on the recipe
         const cookedAt = new Date(date + "T12:00:00").toISOString();
         const updatedRecipes =
-          cooked && slot?.recipeId
+          cooked && slot.recipeId
             ? prev.recipes.map((r) =>
                 r.id === slot.recipeId
                 ? { ...r, lastCookedAt: cookedAt }
@@ -757,8 +774,11 @@ return () => {
             : prev.recipes;
 
         // Kitchen Wrapped: log the cook (deduped per recipe+day — re-confirming
-        // an already-cooked slot never adds a second entry for that date)
-        const cookedRecipe = cooked && slot?.recipeId
+        // an already-cooked slot never adds a second entry for that date;
+        // this also means a confirmed side shares the same dedupe key as a
+        // confirmed main on the same day if it's ever the same recipe, which
+        // is the right call — it's still just one cook of that dish that day)
+        const cookedRecipe = cooked && slot.recipeId
           ? updatedRecipes.find((r) => r.id === slot.recipeId)
           : undefined;
         const updatedCookLog = cookedRecipe
@@ -772,7 +792,7 @@ return () => {
           mealPlan: {
             ...prev.mealPlan,
             slots: prev.mealPlan.slots.map((s) =>
-              s.date === date
+              s.id === id
                 ? { ...s, status: cooked ? "cooked" : "skipped" }
                 : s,
             ),
@@ -863,29 +883,49 @@ return () => {
         const today = todayISO();
         const pastSlots = prev.mealPlan.slots.filter((s) => s.date < today);
         const upcomingSlots = prev.mealPlan.slots.filter((s) => s.date >= today);
-        const lockedByDate = new Map(
-          upcomingSlots.filter((s) => s.isLocked).map((s) => [s.date, s]),
-        );
-        const unlockedSlots = upcomingSlots.filter((s) => !s.isLocked);
-        const unlockedDatesNewOrder = orderedDates.filter((d) => !lockedByDate.has(d));
-        const recipeIdPool = [...unlockedSlots]
-          .sort((a, b) => a.date.localeCompare(b.date))
-          .map((s) => s.recipeId ?? null);
-        const newRecipeByDate = new Map<string, string | null>();
-        unlockedDatesNewOrder.forEach((date, i) => {
-          newRecipeByDate.set(date, recipeIdPool[i] ?? null);
+
+        // Group upcoming slots into whole day units (a date's main + all its
+        // sides) — dragging moves a day's entire contents together, not just
+        // its main's recipeId, so a day's sides always travel with it.
+        const byDate = new Map<string, MealSlot[]>();
+        for (const s of upcomingSlots) {
+          const group = byDate.get(s.date) ?? [];
+          group.push(s);
+          byDate.set(s.date, group);
+        }
+
+        // A day is "locked" (excluded from reordering, stays put) exactly
+        // when its MAIN is locked — a side's own lock only protects that
+        // side's recipe from swap/regenerate, not the day's position.
+        const lockedDates = new Set<string>();
+        for (const [date, group] of byDate) {
+          const main = group.find((s) => s.role === "main");
+          if (main?.isLocked) lockedDates.add(date);
+        }
+
+        const unlockedDatesOriginalOrder = Array.from(byDate.keys())
+          .filter((d) => !lockedDates.has(d))
+          .sort((a, b) => a.localeCompare(b));
+        const unlockedDatesNewOrder = orderedDates.filter((d) => !lockedDates.has(d));
+
+        const pool = unlockedDatesOriginalOrder.map((d) => byDate.get(d)!);
+
+        const relocated: MealSlot[] = [];
+        unlockedDatesNewOrder.forEach((newDate, i) => {
+          const bundle = pool[i] ?? [];
+          for (const s of bundle) {
+            const newStatus = s.recipeId && s.status === "untracked" ? ("pending" as const) : s.status;
+            relocated.push({ ...s, date: newDate, status: newStatus });
+          }
         });
-        const reorderedUpcoming = upcomingSlots.map((slot) => {
-          if (slot.isLocked) return slot;
-          const newRecipeId = newRecipeByDate.get(slot.date) ?? null;
-          const newStatus = newRecipeId && slot.status === "untracked" ? "pending" as const : slot.status;
-          return { ...slot, recipeId: newRecipeId, status: newStatus };
-        });
+
+        const lockedSlots = upcomingSlots.filter((s) => lockedDates.has(s.date));
+
         return {
           ...prev,
           mealPlan: {
             ...prev.mealPlan,
-            slots: [...pastSlots, ...reorderedUpcoming].sort((a, b) => a.date.localeCompare(b.date)),
+            slots: [...pastSlots, ...lockedSlots, ...relocated].sort((a, b) => a.date.localeCompare(b.date)),
           },
         };
       });
@@ -894,7 +934,7 @@ return () => {
   );
 
   const skipSlot = useCallback(
-    (date: string) => {
+    (id: string) => {
       persistAndSync((prev) => {
         if (!prev.mealPlan) return prev;
         return {
@@ -902,7 +942,7 @@ return () => {
           mealPlan: {
             ...prev.mealPlan,
             slots: prev.mealPlan.slots.map((s) =>
-              s.date === date
+              s.id === id
                 ? { ...s, recipeId: null, isLocked: false, status: "untracked" }
                 : s,
             ),
@@ -913,25 +953,65 @@ return () => {
     [persistAndSync],
   );
 
-  const assignSlot = useCallback(
-    (date: string, recipeId: string) => {
+  const assignSlotRecipe = useCallback(
+    (id: string, recipeId: string) => {
       persistAndSync((prev) => {
         if (!prev.mealPlan) return prev;
-        // If the date already exists as a slot, update it
-        const exists = prev.mealPlan.slots.some((s) => s.date === date);
-        const updatedSlots = exists
-          ? prev.mealPlan.slots.map((s) =>
-              s.date === date
-                ? { ...s, recipeId, status: "pending" as const }
-                : s,
-            )
-          : [
-              ...prev.mealPlan.slots,
-              { date, recipeId, isLocked: false, status: "pending" as const },
-            ].sort((a, b) => a.date.localeCompare(b.date));
+        // The slot (main or side) must already exist — sides are created via
+        // addSide() first specifically so they have an id to target here.
+        const exists = prev.mealPlan.slots.some((s) => s.id === id);
+        if (!exists) return prev;
         return {
           ...prev,
-          mealPlan: { ...prev.mealPlan, slots: updatedSlots },
+          mealPlan: {
+            ...prev.mealPlan,
+            slots: prev.mealPlan.slots.map((s) =>
+              s.id === id ? { ...s, recipeId, status: "pending" as const } : s,
+            ),
+          },
+        };
+      });
+    },
+    [persistAndSync],
+  );
+
+  const addSide = useCallback(
+    (date: string) => {
+      const side: MealSlot = {
+        id: createId(),
+        date,
+        role: "side",
+        recipeId: null,
+        isLocked: false,
+        status: "untracked",
+      };
+      persistAndSync((prev) => {
+        if (!prev.mealPlan) return prev;
+        return {
+          ...prev,
+          mealPlan: {
+            ...prev.mealPlan,
+            slots: [...prev.mealPlan.slots, side].sort((a, b) => a.date.localeCompare(b.date)),
+          },
+        };
+      });
+      return side;
+    },
+    [persistAndSync],
+  );
+
+  const removeSide = useCallback(
+    (id: string) => {
+      persistAndSync((prev) => {
+        if (!prev.mealPlan) return prev;
+        const slot = prev.mealPlan.slots.find((s) => s.id === id);
+        if (!slot || slot.role !== "side") return prev; // mains can't be deleted this way
+        return {
+          ...prev,
+          mealPlan: {
+            ...prev.mealPlan,
+            slots: prev.mealPlan.slots.filter((s) => s.id !== id),
+          },
         };
       });
     },
@@ -958,17 +1038,26 @@ return () => {
           ? appendCookEventIfNew(prev.cookLog, cookedRecipe, cookedAt)
           : prev.cookLog;
 
-        // Upsert the slot as cooked
-        const exists = prev.mealPlan.slots.some((s) => s.date === date);
-        const updatedSlots = exists
+        // Upsert the MAIN slot for this date as cooked — telemetry can't
+        // disambiguate which of a day's several dishes this was, so an
+        // unplanned/telemetry-confirmed cook always represents the main.
+        const existingMain = prev.mealPlan.slots.find((s) => s.date === date && s.role === "main");
+        const updatedSlots = existingMain
           ? prev.mealPlan.slots.map((s) =>
-              s.date === date
+              s.id === existingMain.id
                 ? { ...s, recipeId, status: "cooked" as const }
                 : s,
             )
           : [
               ...prev.mealPlan.slots,
-              { date, recipeId, isLocked: false, status: "cooked" as const },
+              {
+                id: createId(),
+                date,
+                role: "main" as const,
+                recipeId,
+                isLocked: false,
+                status: "cooked" as const,
+              },
             ].sort((a, b) => a.date.localeCompare(b.date));
 
         return {
@@ -1025,9 +1114,11 @@ return () => {
       swapSlot,
       confirmSlot,
       skipSlot,
-      assignSlot,
+      assignSlotRecipe,
       insertHistorySlot,
       reorderSlots,
+      addSide,
+      removeSide,
     }),
     [
       ready,
@@ -1055,9 +1146,11 @@ return () => {
       swapSlot,
       confirmSlot,
       skipSlot,
-      assignSlot,
+      assignSlotRecipe,
       insertHistorySlot,
       reorderSlots,
+      addSide,
+      removeSide,
     ],
   );
 

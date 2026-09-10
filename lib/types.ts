@@ -110,12 +110,29 @@ export type ProteinTargets = {
 };
 
 /**
- * A single planned meal slot in the week.
- * One slot = one day's dinner.
+ * A single planned meal slot in the week. A date can now hold more than one
+ * slot — one "main" (auto-managed by generate/regenerate/swap, exactly one
+ * per date) plus any number of "side" slots (100% manual — added, edited,
+ * locked, and confirmed by hand, never touched by regeneration or the
+ * protein-target math).
  */
 export type MealSlot = {
+  /**
+   * Unique per slot. Needed once a date can hold more than one slot — `date`
+   * alone is no longer a unique key, so every mutation targets a slot by id.
+   */
+  id: string;
   /** ISO date string for the calendar day, e.g. "2026-05-19" */
   date: string;
+  /**
+   * "main" = the day's primary dinner — exactly one per date, the only kind
+   * generate/regenerate/swap ever create or touch, and the only kind that
+   * counts toward the weekly protein-target balancing.
+   * "side" = an extra dish added on purpose via "+ Add a side" — locked,
+   * edited, and confirmed individually, but never auto-assigned, swapped,
+   * or regenerated, and excluded from protein-target math.
+   */
+  role: "main" | "side";
   /** The recipe assigned to this slot, or null if empty */
   recipeId: string | null;
   /** True if the user manually pinned this slot — skipped by auto-regeneration */
@@ -137,7 +154,7 @@ export type MealSlot = {
 export type MealPlan = {
   /** ISO date string of the Monday that starts this plan week */
   weekStart: string;
-  /** Ordered array of slots, one per planned day */
+  /** Ordered array of slots — one main per planned date, plus any sides */
   slots: MealSlot[];
 };
 

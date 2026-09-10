@@ -1,10 +1,20 @@
 import type {
   AppData,
+  MealPlan,
   NutritionConfig,
   PlannerConfig,
   ProteinSource,
   ProteinTargets,
 } from "./types";
+
+// Local id generator — deliberately not imported from lib/storage.ts (which
+// itself imports from this file) to avoid a circular import. Only needs to
+// be unique, not to match createId()'s exact format.
+let backfillIdCounter = 0;
+function backfillId(): string {
+  backfillIdCounter += 1;
+  return `slot-backfill-${Date.now()}-${backfillIdCounter}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export const ALL_FOLDER_ID = "all";
 
@@ -139,5 +149,24 @@ export function normalizePlannerConfig(
   return {
     ...config,
     proteinTargets: normalizeProteinTargets(config.proteinTargets),
+  };
+}
+
+/**
+ * Backfills `id` and `role` on every slot — both fields added when "Add a
+ * side" shipped. Any plan saved before that has slots missing them (one per
+ * date, so they were always implicitly "main"). Without this, a pre-existing
+ * plan loaded after the update would have every slot's `id` be `undefined`,
+ * breaking every mutation that now targets a slot by id instead of by date.
+ */
+export function normalizeMealPlan(plan: MealPlan | null | undefined): MealPlan | null {
+  if (!plan) return null;
+  return {
+    ...plan,
+    slots: plan.slots.map((slot) => ({
+      ...slot,
+      id: slot.id ?? backfillId(),
+      role: slot.role ?? "main",
+    })),
   };
 }

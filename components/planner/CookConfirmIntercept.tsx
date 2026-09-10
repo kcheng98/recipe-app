@@ -40,6 +40,8 @@ interface Props {
 
 type SinglePrompt = {
   kind: "single";
+  /** The planner slot this confirms — null for a telemetry-only prompt (no planned slot exists). */
+  slotId: string | null;
   date: string;
   recipeId: string;
   source: "planner" | "telemetry";
@@ -47,6 +49,7 @@ type SinglePrompt = {
 
 type DualPromptA = {
   kind: "dual-a"; // "Did you cook [Planned]?"
+  slotId: string;
   date: string;
   plannedRecipeId: string;
   telemetryRecipeId: string;
@@ -72,6 +75,19 @@ function formatDate(iso: string): string {
   });
 }
 
+/**
+ * Builds the FIFO queue from two sources, now slot-id-aware since a date can
+ * hold more than one pending slot (one main plus any number of sides).
+ *
+ * Mains still merge with same-day telemetry the same way as before (a date
+ * can only have one main, so date remains a safe key for that half).
+ * Telemetry can't disambiguate which of a day's several dishes it caught, so
+ * it's only ever matched against that day's MAIN — never a side.
+ *
+ * Sides never merge with telemetry — each pending side just gets its own
+ * simple "Did you cook this?" prompt, keyed by its own slot id so answering
+ * one side never touches another slot on the same date.
+ */
 function buildQueue(
   pendingSlots: MealSlot[],
 ): QueueItem[] {
@@ -80,10 +96,15 @@ function buildQueue(
     telemetryFlags.map((f) => [f.date, f.recipeId]),
   );
 
-  // Collect all dates involved, sorted chronologically
+  const mainsByDate = new Map<string, MealSlot>();
+  for (const s of pendingSlots) {
+    if (s.role === "main" && !mainsByDate.has(s.date)) mainsByDate.set(s.date, s);
+  }
+
+  // Collect all dates involved on the main/telemetry side, sorted chronologically
   const allDates = Array.from(
     new Set([
-      ...pendingSlots.map((s) => s.date),
+      ...mainsByDate.keys(),
       ...telemetryFlags.map((f) => f.date),
     ]),
   ).sort();
@@ -91,22 +112,29 @@ function buildQueue(
   const items: QueueItem[] = [];
 
   for (const date of allDates) {
-    const slot = pendingSlots.find((s) => s.date === date);
+    const slot = mainsByDate.get(date);
     const telemetryId = telemetryByDate.get(date);
 
     const plannedId = slot?.recipeId ?? null;
 
-    if (plannedId && telemetryId && plannedId !== telemetryId) {
+    if (plannedId && telemetryId && plannedId !== telemetryId && slot) {
       // Both sources, different recipes → two-step
-      items.push({ kind: "dual-a", date, plannedRecipeId: plannedId, telemetryRecipeId: telemetryId });
+      items.push({ kind: "dual-a", slotId: slot.id, date, plannedRecipeId: plannedId, telemetryRecipeId: telemetryId });
       // dual-b is pushed dynamically after the user says "No" to dual-a
-    } else if (plannedId) {
-      items.push({ kind: "single", date, recipeId: plannedId, source: "planner" });
+    } else if (plannedId && slot) {
+      items.push({ kind: "single", slotId: slot.id, date, recipeId: plannedId, source: "planner" });
     } else if (telemetryId) {
-      items.push({ kind: "single", date, recipeId: telemetryId, source: "telemetry" });
+      items.push({ kind: "single", slotId: null, date, recipeId: telemetryId, source: "telemetry" });
     }
   }
 
+  // Each pending side gets its own independent prompt.
+  for (const s of pendingSlots) {
+    if (s.role !== "side" || !s.recipeId) continue;
+    items.push({ kind: "single", slotId: s.id, date: s.date, recipeId: s.recipeId, source: "planner" });
+  }
+
+  items.sort((a, b) => a.date.localeCompare(b.date));
   return items;
 }
 
@@ -154,8 +182,8 @@ export function CookConfirmIntercept({ onDone }: Props) {
 
   const handleSingle = (item: SinglePrompt, cooked: boolean) => {
     withAnimation(() => {
-      if (item.source === "planner") {
-        confirmSlot(item.date, cooked);
+      if (item.source === "planner" && item.slotId) {
+        confirmSlot(item.slotId, cooked);
       } else {
         // Telemetry-only: if confirmed, insert into history
         if (cooked) {
@@ -170,12 +198,12 @@ export function CookConfirmIntercept({ onDone }: Props) {
   const handleDualA = (item: DualPromptA, cookedPlanned: boolean) => {
     withAnimation(() => {
       if (cookedPlanned) {
-        confirmSlot(item.date, true);
+        confirmSlot(item.slotId, true);
         clearPendingCookFlag(item.telemetryRecipeId, item.date);
         advance();
       } else {
         // Mark planned slot skipped, then ask about telemetry recipe
-        confirmSlot(item.date, false);
+        confirmSlot(item.slotId, false);
         advance([{ kind: "dual-b", date: item.date, telemetryRecipeId: item.telemetryRecipeId }]);
       }
     });
