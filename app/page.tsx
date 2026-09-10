@@ -30,6 +30,14 @@ const APPS = [
     iconBg: "#eafaf0",
     accent: "#248a3d",
   },
+  {
+    href: "/travel",
+    label: "Travel",
+    description: "Every trip in or out of the country, with days abroad tracked automatically.",
+    icon: <span className="text-[26px] leading-none">🛂</span>,
+    iconBg: "#ffe4dc",
+    accent: "#ff6b4a",
+  },
 ];
 
 export default function HomebasePage() {
