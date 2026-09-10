@@ -246,6 +246,94 @@ export function comebackMeal(
   return best;
 }
 
+// ─── Monthly trend (YTD bar chart) ──────────────────────────────────────────
+
+export type MonthlyCount = { month: string; count: number };
+
+/** One count per calendar month, January through `throughMonthKey` (inclusive),
+ * for the year `throughMonthKey` falls in — including zero-count months, so a
+ * bar chart has a consistent Jan..now x-axis rather than skipping quiet months. */
+export function monthlyCountsForYear(events: CookEvent[], throughMonthKey: string): MonthlyCount[] {
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    const k = monthKey(e.cookedAt);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const [y, throughM] = throughMonthKey.split("-").map(Number);
+  const months: MonthlyCount[] = [];
+  for (let m = 1; m <= throughM; m++) {
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    months.push({ month: key, count: counts.get(key) ?? 0 });
+  }
+  return months;
+}
+
+// ─── Streaks ─────────────────────────────────────────────────────────────────
+
+export type Streak = { days: number; start: string; end: string };
+
+/** Longest run of consecutive calendar days with at least one cook. */
+export function longestCookingStreak(allEvents: CookEvent[]): Streak | null {
+  if (allEvents.length === 0) return null;
+  const days = Array.from(new Set(allEvents.map((e) => e.cookedAt.slice(0, 10)))).sort();
+
+  let bestLen = 1;
+  let bestStart = days[0];
+  let bestEnd = days[0];
+  let curLen = 1;
+  let curStart = days[0];
+
+  for (let i = 1; i < days.length; i++) {
+    const prev = new Date(`${days[i - 1]}T00:00:00`);
+    const cur = new Date(`${days[i]}T00:00:00`);
+    const diff = Math.round((cur.getTime() - prev.getTime()) / 86_400_000);
+
+    if (diff === 1) {
+      curLen += 1;
+    } else {
+      curLen = 1;
+      curStart = days[i];
+    }
+    if (curLen > bestLen) {
+      bestLen = curLen;
+      bestStart = curStart;
+      bestEnd = days[i];
+    }
+  }
+
+  return { days: bestLen, start: bestStart, end: bestEnd };
+}
+
+// ─── Library coverage ────────────────────────────────────────────────────────
+
+/** % of the CURRENT library that's been cooked at least once (lastCookedAt set).
+ * Deliberately scoped to today's library, not the all-time cook log, so a
+ * deleted recipe's history doesn't keep counting toward "coverage" forever. */
+export function libraryCoveragePct(recipes: Recipe[]): number {
+  if (recipes.length === 0) return 0;
+  const cooked = recipes.filter((r) => r.lastCookedAt !== null).length;
+  return Math.round((cooked / recipes.length) * 100);
+}
+
+// ─── Most overdue rerun ──────────────────────────────────────────────────────
+
+export type OverdueRerun = { recipeId: string; recipeTitle: string; daysSince: number; recipe: Recipe };
+
+/** Among recipes that have been cooked at least once, whichever has gone the
+ * longest since its last cook — a nudge toward something you clearly used to
+ * like but haven't made in a while. */
+export function mostOverdueRerun(recipes: Recipe[], now: Date = new Date()): OverdueRerun | null {
+  const cooked = recipes.filter((r): r is Recipe & { lastCookedAt: string } => r.lastCookedAt !== null);
+  if (cooked.length === 0) return null;
+
+  let oldest = cooked[0];
+  for (const r of cooked) {
+    if (r.lastCookedAt < oldest.lastCookedAt) oldest = r;
+  }
+  const daysSince = Math.round((now.getTime() - new Date(oldest.lastCookedAt).getTime()) / 86_400_000);
+  return { recipeId: oldest.id, recipeTitle: oldest.title, daysSince, recipe: oldest };
+}
+
 // ─── One-and-done vs. regulars (library-wide, all-time) ─────────────────────
 
 export type FrequencyBucket = { recipeId: string; recipeTitle: string; count: number; recipe: Recipe | null };

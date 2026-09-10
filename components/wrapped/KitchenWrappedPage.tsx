@@ -20,19 +20,20 @@ import { useApp } from "@/context/AppProvider";
 import type { ProteinType } from "@/lib/types";
 import {
   busiestMonth,
-  comebackMeal,
-  cookFrequencyBuckets,
   currentMonthKey,
   currentYearKey,
   eventsInMonth,
   eventsInYear,
+  libraryCoveragePct,
+  longestCookingStreak,
   monthLabel,
-  newToRotation,
+  monthlyCountsForYear,
+  mostOverdueRerun,
   previousYearKey,
   proteinMix,
   rankMeals,
   rankMealsByFolder,
-  shiftMonthKey,
+  type MonthlyCount,
   type RankedMeal,
 } from "@/lib/wrapped";
 
@@ -48,18 +49,6 @@ const PROTEIN_META: Record<string, { label: string; emoji: string; color: string
 
 function proteinMeta(p: ProteinType) {
   return PROTEIN_META[p] ?? PROTEIN_META.none;
-}
-
-function monthBoundsISO(key: string): { start: string; end: string } {
-  const [y, m] = key.split("-").map(Number);
-  const start = new Date(y, m - 1, 1).toISOString();
-  const end = new Date(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1).toISOString();
-  return { start, end };
-}
-
-function yearBoundsISO(key: string): { start: string; end: string } {
-  const y = Number(key);
-  return { start: new Date(y, 0, 1).toISOString(), end: new Date(y + 1, 0, 1).toISOString() };
 }
 
 // ─── Small presentational pieces ──────────────────────────────────────────────
@@ -87,24 +76,101 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TopMealHero({ meal }: { meal: RankedMeal }) {
-  const meta = proteinMeta(meal.proteinType);
+function TopMealsRow({ meals }: { meals: RankedMeal[] }) {
+  const top3 = meals.slice(0, 3);
   return (
-    <div className="flex items-center gap-4 rounded-xl bg-[#f5f5f7] p-4">
-      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-[#e5e5ea]">
-        {meal.recipe?.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={meal.recipe.imageUrl} alt={meal.recipeTitle} className="h-full w-full object-cover" />
-        ) : (
-          <span className="text-2xl">{meta.emoji}</span>
-        )}
+    <div className="grid grid-cols-3 gap-3">
+      {top3.map((meal) => {
+        const meta = proteinMeta(meal.proteinType);
+        return (
+          <div key={meal.recipeId} className="text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-[#f5f5f7] ring-1 ring-[#e5e5ea]">
+              {meal.recipe?.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={meal.recipe.imageUrl} alt={meal.recipeTitle} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-2xl">{meta.emoji}</span>
+              )}
+            </div>
+            <p className="mt-2 truncate text-sm font-medium text-[#1d1d1f]">{meal.recipeTitle}</p>
+            <p className="text-xs text-[#86868b]">{meal.count}×</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function YtdBarChart({ data, currentMonth }: { data: MonthlyCount[]; currentMonth: string }) {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  const avg = data.length > 0 ? total / data.length : 0;
+  const busiestEntry = data.reduce<MonthlyCount | null>(
+    (best, d) => (best === null || d.count > best.count ? d : best),
+    null,
+  );
+  const busiestLabel =
+    busiestEntry && busiestEntry.count > 0 ? `${monthLabel(busiestEntry.month).split(" ")[0]} · ${busiestEntry.count}×` : "—";
+
+  return (
+    <div>
+      <div className="flex items-end gap-1.5" style={{ height: 96 }}>
+        {data.map((d) => {
+          const isCurrent = d.month === currentMonth;
+          const heightPct = d.count === 0 ? 4 : Math.max(8, (d.count / max) * 100);
+          return (
+            <div key={d.month} className="flex flex-1 flex-col items-center justify-end gap-1">
+              <div
+                className="w-full rounded-t-md"
+                style={{ height: `${heightPct}%`, backgroundColor: isCurrent ? "#0071e3" : "#cfe0fb" }}
+              />
+              <span className={`text-[10px] ${isCurrent ? "font-semibold text-[#0071e3]" : "text-[#86868b]"}`}>
+                {monthLabel(d.month).slice(0, 3)}
+              </span>
+            </div>
+          );
+        })}
       </div>
-      <div className="min-w-0">
-        <p className="truncate text-base font-semibold text-[#1d1d1f]">{meal.recipeTitle}</p>
-        <p className="mt-0.5 text-sm text-[#86868b]">
-          Cooked {meal.count}× · {meta.emoji} {meta.label}
-        </p>
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#e5e5ea] pt-3 text-center">
+        <div>
+          <p className="text-xs text-[#86868b]">Total</p>
+          <p className="text-sm font-semibold text-[#1d1d1f]">{total}</p>
+        </div>
+        <div>
+          <p className="text-xs text-[#86868b]">Avg / month</p>
+          <p className="text-sm font-semibold text-[#1d1d1f]">{avg.toFixed(1)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-[#86868b]">Busiest</p>
+          <p className="text-sm font-semibold text-[#1d1d1f]">{busiestLabel}</p>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function FactTile({
+  emoji,
+  label,
+  value,
+  tone,
+}: {
+  emoji: string;
+  label: string;
+  value: string;
+  tone: "a" | "b" | "c" | "d";
+}) {
+  const toneClasses: Record<string, string> = {
+    a: "bg-[#eef6ff] text-[#0071e3]",
+    b: "bg-[#fff2e9] text-[#c2650a]",
+    c: "bg-[#eafaf1] text-[#1a8a53]",
+    d: "bg-[#fdeef6] text-[#c23583]",
+  };
+  return (
+    <div className={`rounded-xl p-3 ${toneClasses[tone]}`}>
+      <p className="text-lg">{emoji}</p>
+      <p className="mt-1 text-xs font-medium uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-semibold">{value}</p>
     </div>
   );
 }
@@ -131,17 +197,20 @@ function ProteinMixBars({ mix }: { mix: { proteinType: ProteinType; count: numbe
       {mix.map((slice) => {
         const meta = proteinMeta(slice.proteinType);
         return (
-          <div key={slice.proteinType} className="flex items-center gap-3">
-            <span className="w-28 shrink-0 truncate text-sm text-[#515154]">
+          <div
+            key={slice.proteinType}
+            className="grid grid-cols-[104px_1fr_34px] items-center gap-3 sm:grid-cols-[132px_1fr_40px]"
+          >
+            <span className="min-w-0 truncate text-sm text-[#515154]">
               {meta.emoji} {meta.label}
             </span>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f5f5f7]">
+            <div className="h-2 overflow-hidden rounded-full bg-[#f5f5f7]">
               <div
                 className="h-full rounded-full"
                 style={{ width: `${Math.max(slice.pct, 2)}%`, backgroundColor: meta.color }}
               />
             </div>
-            <span className="w-10 shrink-0 text-right text-sm font-medium text-[#1d1d1f]">{slice.pct}%</span>
+            <span className="text-right text-sm font-medium text-[#1d1d1f]">{slice.pct}%</span>
           </div>
         );
       })}
@@ -157,12 +226,10 @@ export default function KitchenWrappedPage() {
 
   const nowMonthKey = currentMonthKey();
   const nowYearKey = currentYearKey();
-  const prevMonthKey = shiftMonthKey(nowMonthKey, -1);
   const prevYearKey = previousYearKey(nowYearKey);
 
   const monthEvents = useMemo(() => eventsInMonth(cookLog, nowMonthKey), [cookLog, nowMonthKey]);
   const yearEvents = useMemo(() => eventsInYear(cookLog, nowYearKey), [cookLog, nowYearKey]);
-  const prevMonthEvents = useMemo(() => eventsInMonth(cookLog, prevMonthKey), [cookLog, prevMonthKey]);
   const prevYearEvents = useMemo(() => eventsInYear(cookLog, prevYearKey), [cookLog, prevYearKey]);
 
   const monthTop = useMemo(() => rankMeals(monthEvents, recipes), [monthEvents, recipes]);
@@ -172,25 +239,19 @@ export default function KitchenWrappedPage() {
   const byFolder = useMemo(() => rankMealsByFolder(yearEvents, recipes), [yearEvents, recipes]);
 
   const busiest = useMemo(() => busiestMonth(yearEvents), [yearEvents]);
-  const monthDelta = monthEvents.length - prevMonthEvents.length;
   const yearDelta = yearEvents.length - prevYearEvents.length;
   const hasPriorYearData = prevYearEvents.length > 0;
 
-  const monthBounds = useMemo(() => monthBoundsISO(nowMonthKey), [nowMonthKey]);
-  const yearBounds = useMemo(() => yearBoundsISO(nowYearKey), [nowYearKey]);
+  const monthlyCounts = useMemo(
+    () => monthlyCountsForYear(yearEvents, nowMonthKey),
+    [yearEvents, nowMonthKey],
+  );
 
-  const newThisMonth = useMemo(
-    () => newToRotation(cookLog, monthBounds.start, monthBounds.end, recipes),
-    [cookLog, recipes, monthBounds],
-  );
-  const comeback = useMemo(
-    () => comebackMeal(cookLog, yearBounds.start, yearBounds.end, recipes),
-    [cookLog, recipes, yearBounds],
-  );
-  const { oneAndDone, regulars } = useMemo(
-    () => cookFrequencyBuckets(cookLog, recipes),
-    [cookLog, recipes],
-  );
+  const allTimeTop = useMemo(() => rankMeals(cookLog, recipes), [cookLog, recipes]);
+  const comfortDish = allTimeTop[0] ?? null;
+  const streak = useMemo(() => longestCookingStreak(cookLog), [cookLog]);
+  const coveragePct = useMemo(() => libraryCoveragePct(recipes), [recipes]);
+  const overdue = useMemo(() => mostOverdueRerun(recipes), [recipes]);
 
   if (!ready) {
     return (
@@ -246,18 +307,12 @@ export default function KitchenWrappedPage() {
               <SectionCard title="This month" subtitle={monthLabel(nowMonthKey)}>
                 {monthTop.length > 0 ? (
                   <>
-                    <TopMealHero meal={monthTop[0]} />
-                    <div className="mt-4">
-                      <StatRow label="Meals cooked" value={String(monthEvents.length)} />
-                      {prevMonthEvents.length > 0 && (
-                        <StatRow
-                          label={`Vs. ${monthLabel(prevMonthKey)}`}
-                          value={`${monthDelta > 0 ? "+" : ""}${monthDelta}`}
-                        />
-                      )}
+                    <TopMealsRow meals={monthTop} />
+                    <div className="mt-5">
+                      <YtdBarChart data={monthlyCounts} currentMonth={nowMonthKey} />
                     </div>
                     {monthProtein.length > 0 && (
-                      <div className="mt-4">
+                      <div className="mt-5">
                         <ProteinMixBars mix={monthProtein} />
                       </div>
                     )}
@@ -270,8 +325,7 @@ export default function KitchenWrappedPage() {
               <SectionCard title="This year" subtitle={nowYearKey}>
                 {yearTop.length > 0 ? (
                   <>
-                    <TopMealHero meal={yearTop[0]} />
-                    <p className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
+                    <p className="mt-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[#86868b]">
                       Top {Math.min(10, yearTop.length)}
                     </p>
                     <RankedList meals={yearTop} limit={10} />
@@ -320,52 +374,35 @@ export default function KitchenWrappedPage() {
                 </SectionCard>
               )}
 
-              {(newThisMonth.length > 0 || comeback || oneAndDone.length > 0 || regulars.length > 0) && (
-                <SectionCard title="Highlights">
-                  <div className="space-y-4">
-                    {newThisMonth.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-                          New to the rotation this month
-                        </p>
-                        <p className="mt-1 text-sm text-[#1d1d1f]">
-                          {newThisMonth.map((m) => m.recipeTitle).join(", ")}
-                        </p>
-                      </div>
-                    )}
-                    {comeback && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-                          Comeback meal
-                        </p>
-                        <p className="mt-1 text-sm text-[#1d1d1f]">
-                          {comeback.recipeTitle} — back after {comeback.gapDays} days
-                        </p>
-                      </div>
-                    )}
-                    {regulars.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-                          Your regulars (all-time)
-                        </p>
-                        <p className="mt-1 text-sm text-[#1d1d1f]">
-                          {regulars.slice(0, 5).map((m) => `${m.recipeTitle} (${m.count}×)`).join(", ")}
-                        </p>
-                      </div>
-                    )}
-                    {oneAndDone.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">
-                          One-and-done (all-time)
-                        </p>
-                        <p className="mt-1 text-sm text-[#1d1d1f]">
-                          {oneAndDone.length} recipe{oneAndDone.length === 1 ? "" : "s"} tried once, never repeated
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </SectionCard>
-              )}
+              <SectionCard title="Highlights">
+                <div className="grid grid-cols-2 gap-3">
+                  {streak && streak.days > 1 && (
+                    <FactTile
+                      emoji="🔥"
+                      label="Longest streak"
+                      value={`${streak.days} day${streak.days === 1 ? "" : "s"} in a row`}
+                      tone="a"
+                    />
+                  )}
+                  {comfortDish && (
+                    <FactTile
+                      emoji="💛"
+                      label="Comfort dish"
+                      value={`${comfortDish.recipeTitle} · ${comfortDish.count}×`}
+                      tone="b"
+                    />
+                  )}
+                  <FactTile emoji="📚" label="Library cooked" value={`${coveragePct}% of recipes`} tone="c" />
+                  {overdue && (
+                    <FactTile
+                      emoji="⏰"
+                      label="Overdue for a rerun"
+                      value={`${overdue.recipeTitle} · ${overdue.daysSince}d ago`}
+                      tone="d"
+                    />
+                  )}
+                </div>
+              </SectionCard>
             </div>
           )}
         </div>
