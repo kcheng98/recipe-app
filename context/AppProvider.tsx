@@ -186,6 +186,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // instead of overwriting a newer copy. null = no confirmed row yet
   // (signed out, still loading, or the last fetch was ambiguous).
   const cloudVersionRef = useRef<number | null>(null);
+  // Chains cloud writes so they run strictly one at a time. Without this,
+  // two mutations fired close together (e.g. lock a slot, then swap another
+  // a couple seconds later — well within one network round trip) both read
+  // cloudVersionRef before either write's result comes back. The second
+  // write's version guard then fails against the first (a false "conflict"
+  // with no other device involved), and conflict resolution pulls down the
+  // cloud copy from *before* the second edit and discards it — the edit
+  // silently "reverts" a moment later. Chaining onto this promise makes
+  // each save wait for the previous one (including any conflict fetch it
+  // triggered) to fully settle before reading cloudVersionRef for its own
+  // guard, so this race can't happen no matter how fast the user clicks.
+  const cloudSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const syncToCloud = useCallback(
+    async (next: AppData) => {
+      const currentUser = userRef.current;
+      if (!currentUser || !cloudEnabled) return;
+
+      setSyncStatus("syncing");
+      isSavingRef.current = true;
+      const expectedVersion = cloudVersionRef.current;
+
+      try {
+        const result = await saveCloudData(currentUser.id, next, expectedVersion);
+        if (result.status === "ok") {
+          cloudVersionRef.current = result.version;
+          setSyncStatus("synced");
+          return;
+        }
+
+        // Conflict: another writer's save landed in between. Never retry
+        // blind with our stale copy — pull down whatever's actually there
+        // now, so this device converges on the same truth instead of
+        // fighting over which write wins. UNLESS adopting it would mean
+        // silently losing real data (see lib/syncGuard.ts) — that pauses
+        // for a human decision instead of auto-resolving.
+        const fresh = await fetchCloudData(currentUser.id);
+        if (fresh.status === "found") {
+          const localCount = next.recipes.length;
+          const remoteCount = fresh.data.recipes.length;
+          if (isSuspiciousDataLoss(localCount, remoteCount)) {
+            setConflict({
+              localData: next,
+              remoteData: fresh.data,
+              remoteVersion: fresh.version,
+              localCount,
+              remoteCount,
+            });
+            setSyncStatus("conflict");
+            return;
+          }
+          cloudVersionRef.current = fresh.version;
+          setData(fresh.data);
+          saveAppData(fresh.data);
+        }
+        setSyncStatus("conflict");
+      } catch {
+        setSyncStatus("offline");
+      } finally {
+        isSavingRef.current = false;
+      }
+    },
+    [cloudEnabled],
+  );
 
   // ─── Cloud + local save, called directly on every mutation ───────────────
   const persistAndSync = useCallback(
@@ -196,56 +260,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // 1. Write to localStorage immediately (synchronous, never fails)
         saveAppData(next);
 
-        // 2. Write to Supabase immediately (fire-and-forget, no timer)
-        const currentUser = userRef.current;
-        if (currentUser && cloudEnabled) {
-          setSyncStatus("syncing");
-          isSavingRef.current = true;
-          const expectedVersion = cloudVersionRef.current;
-
-          saveCloudData(currentUser.id, next, expectedVersion)
-            .then(async (result) => {
-              if (result.status === "ok") {
-                cloudVersionRef.current = result.version;
-                setSyncStatus("synced");
-                return;
-              }
-
-              // Conflict: another device/tab saved first. Never retry blind
-              // with our stale copy — pull down whatever's actually there
-              // now, so this device converges on the same truth instead of
-              // fighting over which write wins. UNLESS adopting it would
-              // mean silently losing real data (see lib/syncGuard.ts) — that
-              // pauses for a human decision instead of auto-resolving.
-              const fresh = await fetchCloudData(currentUser.id);
-              if (fresh.status === "found") {
-                const localCount = next.recipes.length;
-                const remoteCount = fresh.data.recipes.length;
-                if (isSuspiciousDataLoss(localCount, remoteCount)) {
-                  setConflict({
-                    localData: next,
-                    remoteData: fresh.data,
-                    remoteVersion: fresh.version,
-                    localCount,
-                    remoteCount,
-                  });
-                  setSyncStatus("conflict");
-                  return;
-                }
-                cloudVersionRef.current = fresh.version;
-                setData(fresh.data);
-                saveAppData(fresh.data);
-              }
-              setSyncStatus("conflict");
-            })
-            .catch(() => setSyncStatus("offline"))
-            .finally(() => { isSavingRef.current = false; });
-        }
+        // 2. Queue the Supabase write behind any save already in flight —
+        // see the comment on cloudSaveQueueRef above for why this can't
+        // just fire immediately like it used to.
+        cloudSaveQueueRef.current = cloudSaveQueueRef.current.then(() =>
+          syncToCloud(next),
+        );
 
         return next;
       });
     },
-    [cloudEnabled],
+    [syncToCloud],
   );
 
   // ─── Initial load + realtime subscription ────────────────────────────────

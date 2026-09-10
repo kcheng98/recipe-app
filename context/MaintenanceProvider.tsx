@@ -78,56 +78,70 @@ export function MaintenanceProvider({ children }: { children: React.ReactNode })
   dataRef.current = data;
   const unsubscribeRealtimeRef = useRef<(() => void) | undefined>(undefined);
   const cloudVersionRef = useRef<number | null>(null);
+  // Chains cloud writes so they run strictly one at a time — same fix as
+  // AppProvider's cloudSaveQueueRef. Without it, two edits fired close
+  // together both read cloudVersionRef before either write confirms; the
+  // second collides with the first as a false "conflict" and gets its
+  // change silently reverted to a stale fetched copy.
+  const cloudSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const syncToCloud = useCallback(
+    async (next: MaintenanceData) => {
+      const currentUser = userRef.current;
+      if (!currentUser || !cloudEnabled) return;
+
+      setSyncStatus("syncing");
+      const expectedVersion = cloudVersionRef.current;
+
+      try {
+        const result = await saveMaintenanceCloudData(currentUser.id, next, expectedVersion);
+        if (result.status === "ok") {
+          cloudVersionRef.current = result.version;
+          setSyncStatus("synced");
+          return;
+        }
+        // Conflict: pull the real current state rather than fight over it —
+        // unless that would mean silently losing real data (see
+        // lib/syncGuard.ts), in which case pause for a human decision.
+        const fresh = await fetchMaintenanceCloudData(currentUser.id);
+        if (fresh.status === "found") {
+          const localCount = next.items.length;
+          const remoteCount = fresh.data.items.length;
+          if (isSuspiciousDataLoss(localCount, remoteCount)) {
+            setConflict({
+              localData: next,
+              remoteData: fresh.data,
+              remoteVersion: fresh.version,
+              localCount,
+              remoteCount,
+            });
+            setSyncStatus("conflict");
+            return;
+          }
+          cloudVersionRef.current = fresh.version;
+          setData(fresh.data);
+          saveMaintenanceData(fresh.data);
+        }
+        setSyncStatus("conflict");
+      } catch {
+        setSyncStatus("offline");
+      }
+    },
+    [cloudEnabled],
+  );
 
   const persistAndSync = useCallback(
     (updater: (prev: MaintenanceData) => MaintenanceData) => {
       setData((prev) => {
         const next = updater(prev);
         saveMaintenanceData(next);
-
-        const currentUser = userRef.current;
-        if (currentUser && cloudEnabled) {
-          setSyncStatus("syncing");
-          const expectedVersion = cloudVersionRef.current;
-
-          saveMaintenanceCloudData(currentUser.id, next, expectedVersion)
-            .then(async (result) => {
-              if (result.status === "ok") {
-                cloudVersionRef.current = result.version;
-                setSyncStatus("synced");
-                return;
-              }
-              // Conflict: pull the real current state rather than fight over it —
-              // unless that would mean silently losing real data (see
-              // lib/syncGuard.ts), in which case pause for a human decision.
-              const fresh = await fetchMaintenanceCloudData(currentUser.id);
-              if (fresh.status === "found") {
-                const localCount = next.items.length;
-                const remoteCount = fresh.data.items.length;
-                if (isSuspiciousDataLoss(localCount, remoteCount)) {
-                  setConflict({
-                    localData: next,
-                    remoteData: fresh.data,
-                    remoteVersion: fresh.version,
-                    localCount,
-                    remoteCount,
-                  });
-                  setSyncStatus("conflict");
-                  return;
-                }
-                cloudVersionRef.current = fresh.version;
-                setData(fresh.data);
-                saveMaintenanceData(fresh.data);
-              }
-              setSyncStatus("conflict");
-            })
-            .catch(() => setSyncStatus("offline"));
-        }
-
+        cloudSaveQueueRef.current = cloudSaveQueueRef.current.then(() =>
+          syncToCloud(next),
+        );
         return next;
       });
     },
-    [cloudEnabled],
+    [syncToCloud],
   );
 
   useEffect(() => {
