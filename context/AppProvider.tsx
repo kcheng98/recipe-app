@@ -213,23 +213,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setSyncStatus("syncing");
       isSavingRef.current = true;
-      const expectedVersion = cloudVersionRef.current;
 
       try {
-        const result = await saveCloudData(currentUser.id, next, expectedVersion);
+        const result = await saveCloudData(currentUser.id, next, cloudVersionRef.current);
         if (result.status === "ok") {
           cloudVersionRef.current = result.version;
           setSyncStatus("synced");
           return;
         }
 
-        // Conflict: another writer's save landed in between. Never retry
-        // blind with our stale copy — pull down whatever's actually there
-        // now, so this device converges on the same truth instead of
-        // fighting over which write wins. UNLESS adopting it would mean
-        // silently losing real data (see lib/syncGuard.ts) — that pauses
-        // for a human decision instead of auto-resolving.
-        const fresh = await fetchCloudData(currentUser.id);
+        // Conflict: our cached version number didn't match the row's
+        // actual version. Most of the time this ISN'T two people editing
+        // at once — it's this tab's own version counter having fallen
+        // behind (backgrounded and missed a realtime push, a stale second
+        // tab, etc). `next` still reflects what the user just did here, so
+        // re-read the real version and retry that SAME write once before
+        // giving up on it. Silently discarding a just-made edit in favor
+        // of whatever the cloud happened to have is exactly the "silent
+        // revert" bug this file exists to prevent.
+        let fresh = await fetchCloudData(currentUser.id);
+        if (fresh.status === "found") {
+          const retry = await saveCloudData(currentUser.id, next, fresh.version);
+          if (retry.status === "ok") {
+            cloudVersionRef.current = retry.version;
+            setSyncStatus("synced");
+            return;
+          }
+          // Retried against the up-to-date version and STILL conflicted —
+          // someone else is actively writing right now, faster than we
+          // can follow. Re-fetch once more so we converge on the truth,
+          // instead of fighting over which write wins. UNLESS adopting it
+          // would mean silently losing real data (see lib/syncGuard.ts) —
+          // that pauses for a human decision instead of auto-resolving.
+          fresh = await fetchCloudData(currentUser.id);
+        }
         if (fresh.status === "found") {
           const localCount = next.recipes.length;
           const remoteCount = fresh.data.recipes.length;

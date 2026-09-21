@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/context/AppProvider";
 import { ALL_FOLDER_ID } from "@/lib/defaults";
 import type { Folder } from "@/lib/types";
@@ -27,6 +27,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const { user, syncStatus, cloudEnabled } = useApp();
   const pathname = usePathname();
+  const router = useRouter();
 
   const allFolders = [
     { id: ALL_FOLDER_ID, label: "All Recipes", icon: "📚" },
@@ -83,7 +84,11 @@ export default function Sidebar({
                     type="button"
                     onClick={() => {
                       if (isPlannerActive || isWrappedActive || isNutritionActive) {
-                        window.location.href = folder.id === ALL_FOLDER_ID ? "/recipe" : `/recipe?folder=${folder.id}`;
+                        // Soft navigation — a hard nav here would remount
+                        // AppProvider and drop cloudVersionRef/the save
+                        // queue, racing any in-flight save against an
+                        // unguarded fresh fetch on the next mount.
+                        router.push(folder.id === ALL_FOLDER_ID ? "/recipe" : `/recipe?folder=${folder.id}`);
                       } else {
                         onFolderSelect(folder.id);
                       }
