@@ -168,7 +168,7 @@ function DayCard({
   onLock,
   onSwap,
   onAdd,
-  onConfirmCooked,
+  onAddSide,
   onSkip,
   onCollapse,
   isHistory,
@@ -180,7 +180,7 @@ function DayCard({
   onLock: () => void;
   onSwap: () => void;
   onAdd: () => void;
-  onConfirmCooked: () => void;
+  onAddSide: () => void;
   onSkip: () => void;
   onCollapse?: () => void;
   isHistory?: boolean;
@@ -189,6 +189,7 @@ function DayCard({
 }) {
   const today = todayISO();
   const isPast = slot.date < today;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div
@@ -257,18 +258,6 @@ function DayCard({
           {slot.isLocked ? "🔒" : "🔓"}
         </button>
         <button
-          onClick={onConfirmCooked}
-          disabled={!recipe}
-          title="Mark cooked"
-          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition
-            ${slot.status === "cooked"
-              ? "bg-green-100 text-green-600"
-              : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500"}
-            disabled:opacity-30 disabled:cursor-not-allowed`}
-        >
-          ✓
-        </button>
-        <button
           onClick={onSwap}
           disabled={slot.isLocked || !recipe}
           title="Swap recipe"
@@ -278,14 +267,48 @@ function DayCard({
         >
           ↻
         </button>
-        <button
-          onClick={onAdd}
-          title="Assign a recipe"
-          className="w-8 h-8 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center
-                     hover:bg-green-50 hover:text-green-500 transition text-lg leading-none"
-        >
-          ＋
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            title="Change recipe or add a side"
+            className={`w-8 h-8 rounded-xl flex items-center justify-center text-lg leading-none transition
+              ${menuOpen
+                ? "bg-green-100 text-green-600"
+                : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500"}`}
+          >
+            ＋
+          </button>
+          {menuOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="fixed inset-0 z-40"
+                onClick={() => setMenuOpen(false)}
+              />
+              <div className="absolute right-0 top-9 z-50 w-44 rounded-xl bg-white shadow-lg ring-1 ring-black/5 overflow-hidden">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onAdd();
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Change recipe
+                </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onAddSide();
+                  }}
+                  className="w-full text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition border-t border-gray-100"
+                >
+                  ＋ Add a side
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <button
           onClick={onSkip}
           title="Skip this slot"
@@ -306,14 +329,12 @@ function SideRow({
   recipe,
   onLock,
   onEdit,
-  onConfirmCooked,
   onRemove,
 }: {
   slot: MealSlot;
   recipe: Recipe | null;
   onLock: () => void;
   onEdit: () => void;
-  onConfirmCooked: () => void;
   onRemove: () => void;
 }) {
   return (
@@ -371,19 +392,6 @@ function SideRow({
           ＋
         </button>
         <button
-          onClick={onConfirmCooked}
-          disabled={!recipe}
-          title="Mark cooked"
-          style={{ width: "26px", height: "26px" }}
-          className={`rounded-lg flex items-center justify-center text-xs font-bold transition
-            ${slot.status === "cooked"
-              ? "bg-green-100 text-green-600"
-              : "bg-gray-100 text-gray-400 hover:bg-green-50 hover:text-green-500"}
-            disabled:opacity-30 disabled:cursor-not-allowed`}
-        >
-          ✓
-        </button>
-        <button
           onClick={onRemove}
           title="Remove side"
           style={{ width: "26px", height: "26px" }}
@@ -404,7 +412,6 @@ function DayGroupBody({
   resolveRecipe,
   mainActions,
   sideActionsFor,
-  onAddSide,
   isHistory,
   onCollapse,
   isDragging,
@@ -416,16 +423,14 @@ function DayGroupBody({
     onLock: () => void;
     onSwap: () => void;
     onAdd: () => void;
-    onConfirmCooked: () => void;
+    onAddSide: () => void;
     onSkip: () => void;
   };
   sideActionsFor: (slot: MealSlot) => {
     onLock: () => void;
     onEdit: () => void;
-    onConfirmCooked: () => void;
     onRemove: () => void;
   };
-  onAddSide: () => void;
   isHistory?: boolean;
   onCollapse?: () => void;
   isDragging?: boolean;
@@ -454,14 +459,6 @@ function DayGroupBody({
           ))}
         </div>
       )}
-      <button
-        onClick={onAddSide}
-        className="ml-5 mt-0.5 self-start inline-flex items-center gap-1.5 rounded-full border border-dashed
-                   border-gray-300 px-2.5 py-1 text-xs font-semibold text-gray-400
-                   hover:text-orange-500 hover:border-orange-200 hover:bg-orange-50 transition"
-      >
-        ＋ {group.sides.length > 0 ? "Add another side" : "Add a side"}
-      </button>
     </div>
   );
 }
@@ -473,7 +470,6 @@ function SortableDayGroup({
   resolveRecipe,
   mainActions,
   sideActionsFor,
-  onAddSide,
 }: {
   group: DayGroup;
   resolveRecipe: (slot: MealSlot) => Recipe | null;
@@ -481,16 +477,14 @@ function SortableDayGroup({
     onLock: () => void;
     onSwap: () => void;
     onAdd: () => void;
-    onConfirmCooked: () => void;
+    onAddSide: () => void;
     onSkip: () => void;
   };
   sideActionsFor: (slot: MealSlot) => {
     onLock: () => void;
     onEdit: () => void;
-    onConfirmCooked: () => void;
     onRemove: () => void;
   };
-  onAddSide: () => void;
 }) {
   const {
     attributes,
@@ -525,7 +519,6 @@ function SortableDayGroup({
         resolveRecipe={resolveRecipe}
         mainActions={mainActions}
         sideActionsFor={sideActionsFor}
-        onAddSide={onAddSide}
         isDragging={isDragging}
         showDragHint={!group.main.isLocked}
       />
@@ -548,7 +541,6 @@ export function MealPlannerView() {
     generateMealPlan,
     lockSlot,
     swapSlot,
-    confirmSlot,
     skipSlot,
     reorderSlots,
     addSide,
@@ -632,7 +624,7 @@ export function MealPlannerView() {
     onLock: () => lockSlot(slot.id),
     onSwap: () => swapSlot(slot.id),
     onAdd: () => setPickerTarget({ id: slot.id, date: slot.date }),
-    onConfirmCooked: () => confirmSlot(slot.id, true),
+    onAddSide: () => handleAddSide(slot.date),
     onSkip: () => {
       if (confirm(`Skip ${formatDayLabel(slot.date)}? This will clear the assigned recipe.`)) {
         skipSlot(slot.id);
@@ -643,7 +635,6 @@ export function MealPlannerView() {
   const sideActionsFor = (slot: MealSlot) => ({
     onLock: () => lockSlot(slot.id),
     onEdit: () => setPickerTarget({ id: slot.id, date: slot.date }),
-    onConfirmCooked: () => confirmSlot(slot.id, true),
     onRemove: () => removeSide(slot.id),
   });
 
@@ -745,7 +736,6 @@ export function MealPlannerView() {
                           resolveRecipe={resolveRecipe}
                           mainActions={mainActionsFor(group.main)}
                           sideActionsFor={sideActionsFor}
-                          onAddSide={() => handleAddSide(group.date)}
                           isHistory
                           onCollapse={() => toggleDate(group.date)}
                         />
@@ -783,7 +773,6 @@ export function MealPlannerView() {
                         resolveRecipe={resolveRecipe}
                         mainActions={mainActionsFor(group.main)}
                         sideActionsFor={sideActionsFor}
-                        onAddSide={() => handleAddSide(group.date)}
                       />
                     ))}
                   </SortableContext>
